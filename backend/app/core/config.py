@@ -25,7 +25,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5500",
     ]
     room_ttl_hours: int = 24
+    room_cleanup_interval_seconds: int = 300
     max_upload_size_bytes: int = 5 * 1024 * 1024
+    max_drawing_data_bytes: int = 2_000_000
     upload_dir: Path = PROJECT_ROOT / "backend" / "uploads"
 
     @field_validator("cors_origins", mode="before")

@@ -6,6 +6,8 @@ const $ = (id) => document.getElementById(id);
 const dom = {
   homeView: $("home-view"),
   lobbyView: $("lobby-view"),
+  gameView: $("game-view"),
+  roomHeader: $("room-header"),
   createForm: $("create-form"),
   createNickname: $("create-nickname"),
   createMode: $("create-mode"),
@@ -28,6 +30,9 @@ const dom = {
   settingsDrawing: $("settings-drawing"),
   settingsNote: $("settings-note"),
   settingsSummary: $("settings-summary"),
+  hostStart: $("host-start"),
+  startGameBtn: $("start-game-btn"),
+  startHint: $("start-hint"),
   uploadForm: $("upload-form"),
   imageInput: $("image-input"),
   uploadBtn: $("upload-btn"),
@@ -36,6 +41,36 @@ const dom = {
   imagesSummary: $("images-summary"),
   imagesHint: $("images-hint"),
   imagesComplete: $("images-complete"),
+  gamePhaseEyebrow: $("game-phase-eyebrow"),
+  gamePhaseTitle: $("game-phase-title"),
+  gamePhaseCopy: $("game-phase-copy"),
+  gameTimer: $("game-timer"),
+  gameTimerLabel: $("game-timer-label"),
+  viewingPanel: $("viewing-panel"),
+  drawingPanel: $("drawing-panel"),
+  completedPanel: $("completed-panel"),
+  referenceImage: $("reference-image"),
+  referencePlaceholder: $("reference-placeholder"),
+  drawingCanvas: $("drawing-canvas"),
+  canvasLock: $("canvas-lock"),
+  canvasLockTitle: $("canvas-lock-title"),
+  canvasLockCopy: $("canvas-lock-copy"),
+  brushColor: $("brush-color"),
+  brushSize: $("brush-size"),
+  brushSizeLabel: $("brush-size-label"),
+  eraserBtn: $("eraser-btn"),
+  undoBtn: $("undo-btn"),
+  redoBtn: $("redo-btn"),
+  clearBtn: $("clear-btn"),
+  submitDrawingBtn: $("submit-drawing-btn"),
+  saveStatus: $("save-status"),
+  completedProgress: $("completed-progress"),
+  hostGameControls: $("host-game-controls"),
+  finishDrawingBtn: $("finish-drawing-btn"),
+  gamePlayersList: $("game-players-list"),
+  gameProgressSummary: $("game-progress-summary"),
+  gamePlayerCount: $("game-player-count"),
+  gameModeLabel: $("game-mode-label"),
   toast: $("toast"),
 };
 
@@ -46,21 +81,50 @@ const MODE_LABELS = {
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const EXPIRED_SOCKET_CODES = new Set([4401, 4404, 4410]);
+const DRAWING_SAVE_DELAY = 900;
+const ACTIVE_PHASES = new Set(["image_viewing", "drawing", "drawing_completed"]);
 
 let session = null;
 let roomState = null;
+let gameState = null;
+let drawingState = null;
+
 let socket = null;
 let heartbeatTimer = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 let toastTimer = null;
+
 let imagesSignature = "";
 let imagesRequestId = 0;
 let imageObjectUrls = [];
 
+let clockOffsetMs = 0;
+let syncInFlight = false;
+let lastSyncAttempt = 0;
+let referenceObjectUrl = null;
+let referenceRequestId = 0;
+
+let canvas = null;
+let context = null;
+let strokes = [];
+let undoStack = [];
+let redoStack = [];
+let currentStroke = null;
+let strokeStartSnapshot = null;
+let drawingPointerId = null;
+let eraserActive = false;
+let saveTimer = null;
+let saveRetryTimer = null;
+let activeSave = null;
+let lastSavedPayload = "";
+let currentView = "home";
+
 function init() {
   bindEvents();
+  setupCanvas();
   prefillJoinCodeFromUrl();
+  window.setInterval(updateCountdown, 250);
 
   const saved = loadSession();
   if (saved) {
@@ -79,6 +143,20 @@ function bindEvents() {
   dom.settingsViewing.addEventListener("change", handleSettingsChange);
   dom.settingsDrawing.addEventListener("change", handleSettingsChange);
   dom.uploadForm.addEventListener("submit", handleUpload);
+  dom.startGameBtn.addEventListener("click", handleStartGame);
+  dom.finishDrawingBtn.addEventListener("click", handleFinishDrawing);
+  dom.submitDrawingBtn.addEventListener("click", handleSubmitOrReopen);
+  dom.undoBtn.addEventListener("click", undoStroke);
+  dom.redoBtn.addEventListener("click", redoStroke);
+  dom.clearBtn.addEventListener("click", clearCanvas);
+  dom.eraserBtn.addEventListener("click", toggleEraser);
+  dom.brushColor.addEventListener("input", () => {
+    eraserActive = false;
+    updateDrawingControls();
+  });
+  dom.brushSize.addEventListener("input", () => {
+    dom.brushSizeLabel.textContent = dom.brushSize.value;
+  });
 
   dom.imagesList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-delete-image]");
@@ -87,10 +165,15 @@ function bindEvents() {
   });
 
   window.addEventListener("beforeunload", () => {
+    flushDrawingOnExit();
     if (socket) {
       socket.onclose = null;
       socket.close();
     }
+  });
+  window.addEventListener("pagehide", flushDrawingOnExit);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushDrawingOnExit();
   });
 }
 
@@ -159,7 +242,7 @@ function beginSession(result) {
     nickname: result.player.nickname,
   };
   saveSession(session);
-  enterLobby(result.room);
+  enterRoom(result.room);
 }
 
 async function restoreSession() {
@@ -172,33 +255,38 @@ async function restoreSession() {
     }
     session.nickname = me.nickname;
     saveSession(session);
-    enterLobby(state);
+    enterRoom(state);
     showToast("Session restored.", "success");
   } catch (error) {
-    if (error instanceof ApiError) {
-      if ([401, 404, 410].includes(error.status)) {
-        clearSession();
-        session = null;
-        setConnection("offline");
-        showToast("Your previous room session has expired.");
-        return;
-      }
+    if (error instanceof ApiError && [401, 404, 410].includes(error.status)) {
+      clearSession();
+      session = null;
+      setConnection("offline");
+      showToast("Your previous room session has expired.");
+      return;
     }
     handleError(error);
   }
 }
 
-function enterLobby(state) {
+function enterRoom(state) {
   roomState = state;
-  dom.homeView.classList.add("hidden");
-  dom.lobbyView.classList.remove("hidden");
-
   const url = new URL(window.location.href);
   url.searchParams.set("room", state.code);
   window.history.replaceState({}, "", url);
 
+  showRoomView("lobby");
   renderLobby(state);
   connectSocket();
+  refreshGameState();
+}
+
+function showRoomView(view) {
+  currentView = view;
+  dom.homeView.classList.toggle("hidden", view !== "home");
+  dom.lobbyView.classList.toggle("hidden", view !== "lobby");
+  dom.gameView.classList.toggle("hidden", view !== "game");
+  dom.roomHeader.classList.toggle("hidden", view === "home");
 }
 
 function renderLobby(state) {
@@ -229,6 +317,7 @@ function renderLobby(state) {
 
   renderSettings(state, me.is_host);
   renderImages(state, me.is_host);
+  renderHostStart(state, me.is_host);
 }
 
 function renderPlayers(state, me) {
@@ -299,6 +388,24 @@ function renderSettings(state, isHost) {
     formatDrawingDuration(settings.drawing_duration_seconds);
 }
 
+function renderHostStart(state, isHost) {
+  dom.hostStart.classList.toggle("hidden", !isHost);
+  if (!isHost) return;
+
+  dom.startGameBtn.disabled = !state.can_start;
+  if (state.player_count < state.min_players) {
+    const missing = state.min_players - state.player_count;
+    dom.startHint.textContent = `Need ${missing} more player${missing === 1 ? "" : "s"} before starting.`;
+  } else if (!state.uploads_complete) {
+    dom.startHint.textContent =
+      state.settings.mode === "same_image"
+        ? "Upload exactly one reference image."
+        : "Upload one reference image per player.";
+  } else {
+    dom.startHint.textContent = "Everyone is in. Start when you are ready.";
+  }
+}
+
 function renderImages(state, isHost) {
   dom.imagesSummary.textContent =
     `${state.uploaded_images} / ${state.required_images} uploaded`;
@@ -354,7 +461,7 @@ async function loadImages() {
       }),
     );
 
-    if (requestId !== imagesRequestId) {
+    if (requestId !== imagesRequestId || currentSession !== session) {
       for (const entry of entries) {
         if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
       }
@@ -565,6 +672,753 @@ async function copyRoomCode() {
   }
 }
 
+async function handleStartGame() {
+  if (!session || !roomState) return;
+  dom.startGameBtn.disabled = true;
+
+  try {
+    const state = await api.startGame(session.roomCode, session.token);
+    handleGameState(state);
+    showToast("Game started. Memorize the reference!", "success");
+  } catch (error) {
+    handleError(error);
+  } finally {
+    renderHostStart(roomState, currentPlayer()?.is_host);
+  }
+}
+
+async function handleFinishDrawing() {
+  if (!session || !gameState) return;
+  if (!window.confirm("End drawing for everyone now?")) return;
+
+  dom.finishDrawingBtn.disabled = true;
+  try {
+    const state = await api.finishDrawing(
+      session.roomCode,
+      session.token,
+    );
+    handleGameState(state);
+    showToast("Drawing locked.", "success");
+  } catch (error) {
+    handleError(error);
+  } finally {
+    dom.finishDrawingBtn.disabled = false;
+  }
+}
+
+function handleGameState(state) {
+  if (!state) return;
+  const previousPhase = gameState?.phase ?? null;
+  gameState = state;
+  clockOffsetMs = Date.parse(state.server_time) - Date.now();
+  dom.roomCode.textContent = state.room_code;
+  showRoomView("game");
+  renderGameState();
+
+  if (state.phase === "image_viewing") {
+    if (previousPhase !== "image_viewing" || !referenceObjectUrl) {
+      loadReferenceImage();
+    }
+  } else {
+    clearReferenceImage();
+  }
+
+  if (state.phase === "drawing") {
+    if (previousPhase !== "drawing" || !drawingState) {
+      loadDrawingState();
+    } else {
+      updateDrawingControls();
+    }
+  } else if (state.phase === "drawing_completed") {
+    window.clearTimeout(saveTimer);
+    if (
+      previousPhase !== "drawing_completed" ||
+      !drawingState ||
+      drawingState.status !== "locked"
+    ) {
+      loadDrawingState();
+    }
+    setSaveStatus("Drawing locked");
+  } else {
+    window.clearTimeout(saveTimer);
+  }
+
+  updateCountdown();
+}
+
+function renderGameState() {
+  if (!gameState) return;
+  const me = currentPlayer();
+  const phase = gameState.phase;
+  const configs = {
+    image_viewing: {
+      eyebrow: "Viewing phase",
+      title: "Memorize the image",
+      copy: "The reference disappears when the viewing countdown ends.",
+    },
+    drawing: {
+      eyebrow: "Drawing phase",
+      title: "Draw from memory",
+      copy: "Use the tools below. Your drawing saves automatically.",
+    },
+    drawing_completed: {
+      eyebrow: "Drawing complete",
+      title: "Pencils down",
+      copy: "All drawings are locked. The reveal arrives in the next milestone.",
+    },
+  };
+  const config = configs[phase] || {
+    eyebrow: "Game",
+    title: "Waiting for the round",
+    copy: "The host is preparing the game.",
+  };
+
+  dom.gamePhaseEyebrow.textContent = config.eyebrow;
+  dom.gamePhaseTitle.textContent = config.title;
+  dom.gamePhaseCopy.textContent = config.copy;
+
+  dom.viewingPanel.classList.toggle("hidden", phase !== "image_viewing");
+  dom.drawingPanel.classList.toggle("hidden", phase !== "drawing");
+  dom.completedPanel.classList.toggle(
+    "hidden",
+    phase !== "drawing_completed",
+  );
+
+  dom.hostGameControls.classList.toggle(
+    "hidden",
+    !(me?.is_host && phase === "drawing"),
+  );
+
+  if (phase === "drawing_completed") {
+    dom.completedProgress.textContent =
+      `${gameState.submitted_count} of ${gameState.player_count} drawings locked.`;
+  }
+
+  dom.gameModeLabel.textContent =
+    gameState.mode === "same_image"
+      ? "Same image mode"
+      : "Random assignment mode";
+
+  renderGameProgress();
+  updateDrawingControls();
+  updateCountdown();
+}
+
+function renderGameProgress() {
+  dom.gamePlayersList.replaceChildren();
+
+  for (const player of gameState.players) {
+    const roomPlayer = roomState?.players.find(
+      (candidate) => candidate.id === player.player_id,
+    );
+
+    const row = document.createElement("li");
+    row.className = "player-row";
+
+    const avatar = document.createElement("div");
+    avatar.className = "player-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = initials(player.nickname);
+
+    const main = document.createElement("div");
+    main.className = "player-main";
+
+    const nameLine = document.createElement("div");
+    nameLine.className = "player-name-line";
+
+    const name = document.createElement("span");
+    name.className = "player-name";
+    name.textContent = player.nickname;
+    nameLine.append(name);
+
+    if (roomPlayer?.is_host) nameLine.append(makeBadge("Host", "badge-host"));
+    if (player.player_id === session.playerId) {
+      nameLine.append(makeBadge("You", "badge-you"));
+    }
+
+    let label = "Not started";
+    let badgeClass = "badge-waiting";
+    if (player.drawing_status === "submitted") {
+      label = "Submitted";
+      badgeClass = "badge-ready";
+    } else if (player.drawing_status === "locked") {
+      label = "Locked";
+      badgeClass = "badge-host";
+    } else if (player.has_drawing) {
+      label = "Drawing";
+      badgeClass = "badge-you";
+    }
+    nameLine.append(makeBadge(label, badgeClass));
+
+    const meta = document.createElement("div");
+    meta.className = "player-meta";
+    const dot = document.createElement("span");
+    dot.className = `online-dot ${player.is_connected ? "" : "offline"}`;
+    const status = document.createElement("span");
+    status.textContent = player.is_connected ? "Online" : "Offline";
+    meta.append(dot, status);
+
+    main.append(nameLine, meta);
+    row.append(avatar, main);
+    dom.gamePlayersList.append(row);
+  }
+
+  const summary =
+    gameState.phase === "drawing_completed"
+      ? `${gameState.submitted_count} of ${gameState.player_count} locked`
+      : `${gameState.submitted_count} submitted`;
+  dom.gameProgressSummary.textContent = summary;
+  dom.gamePlayerCount.textContent = `${gameState.player_count} players`;
+}
+
+async function refreshGameState() {
+  if (!session) return;
+  const currentSession = session;
+  try {
+    const state = await api.getGame(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (currentSession !== session) return;
+    handleGameState(state);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      gameState = null;
+      drawingState = null;
+      if (currentView === "game") showRoomView("lobby");
+      return;
+    }
+    if (error instanceof ApiError && [401, 404, 410].includes(error.status)) {
+      endSession("Your room session has expired. Please join again.");
+    }
+  }
+}
+
+async function refreshRoomState() {
+  if (!session) return;
+  const currentSession = session;
+  try {
+    const state = await api.getRoom(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (currentSession !== session) return;
+    renderLobby(state);
+  } catch (error) {
+    if (error instanceof ApiError && [401, 404, 410].includes(error.status)) {
+      endSession("Your room session has expired. Please join again.");
+    }
+  }
+}
+
+async function loadReferenceImage() {
+  if (!session || !gameState || gameState.phase !== "image_viewing") return;
+  const currentSession = session;
+  const requestId = ++referenceRequestId;
+  revokeReferenceUrl();
+  dom.referenceImage.classList.add("hidden");
+  dom.referencePlaceholder.classList.remove("hidden");
+  dom.referencePlaceholder.textContent = "Loading your reference image…";
+
+  try {
+    const blob = await api.fetchReferenceBlob(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (requestId !== referenceRequestId || currentSession !== session) return;
+
+    referenceObjectUrl = URL.createObjectURL(blob);
+    dom.referenceImage.src = referenceObjectUrl;
+    dom.referenceImage.classList.remove("hidden");
+    dom.referencePlaceholder.classList.add("hidden");
+  } catch (error) {
+    if (error instanceof ApiError && [401, 410].includes(error.status)) {
+      endSession("Your room session has expired.");
+      return;
+    }
+    dom.referencePlaceholder.classList.remove("hidden");
+    dom.referencePlaceholder.textContent = "Reference image unavailable.";
+  }
+}
+
+function clearReferenceImage() {
+  referenceRequestId += 1;
+  revokeReferenceUrl();
+  dom.referenceImage.classList.add("hidden");
+  dom.referencePlaceholder.classList.remove("hidden");
+  dom.referencePlaceholder.textContent = "The reference is hidden for now.";
+}
+
+function revokeReferenceUrl() {
+  if (referenceObjectUrl) {
+    URL.revokeObjectURL(referenceObjectUrl);
+    referenceObjectUrl = null;
+  }
+  dom.referenceImage.removeAttribute("src");
+}
+
+async function loadDrawingState() {
+  if (!session || !gameState) return;
+  const currentSession = session;
+  try {
+    const state = await api.getDrawing(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (currentSession !== session) return;
+    drawingState = state;
+    applyDrawingData(state.data, { loaded: true });
+    if (gameState?.phase === "drawing_completed") {
+      setSaveStatus("Drawing locked");
+    }
+    updateDrawingControls();
+  } catch (error) {
+    if (error instanceof ApiError && [401, 410].includes(error.status)) {
+      endSession("Your room session has expired.");
+    }
+  }
+}
+
+function applyDrawingData(data, { loaded = false } = {}) {
+  strokes = (data?.strokes || []).map((stroke) => ({
+    color: stroke.color,
+    size: stroke.size,
+    erase: Boolean(stroke.erase),
+    points: stroke.points.map((point) => ({ x: point.x, y: point.y })),
+  }));
+  undoStack = [];
+  redoStack = [];
+  currentStroke = null;
+  strokeStartSnapshot = null;
+  drawingPointerId = null;
+  redrawCanvas();
+  lastSavedPayload = data ? JSON.stringify(buildDrawingData()) : "";
+  if (loaded) {
+    setSaveStatus(data ? "Saved drawing loaded" : "All changes saved");
+  }
+  updateDrawingControls();
+}
+
+function setupCanvas() {
+  canvas = dom.drawingCanvas;
+  context = canvas.getContext("2d");
+  canvas.addEventListener("pointerdown", beginStroke);
+  canvas.addEventListener("pointermove", moveStroke);
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+}
+
+function canvasPoint(event) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: clamp((event.clientX - rect.left) * scaleX, 0, canvas.width),
+    y: clamp((event.clientY - rect.top) * scaleY, 0, canvas.height),
+  };
+}
+
+function beginStroke(event) {
+  if (!canEditDrawing()) return;
+  event.preventDefault();
+  const point = canvasPoint(event);
+  drawingPointerId = event.pointerId;
+  try {
+    canvas.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture is optional.
+  }
+  strokeStartSnapshot = strokes.slice();
+  currentStroke = {
+    color: dom.brushColor.value,
+    size: Number(dom.brushSize.value),
+    erase: eraserActive,
+    points: [point],
+  };
+  drawStrokeDot(currentStroke, point);
+  setSaveStatus("Unsaved changes");
+}
+
+function moveStroke(event) {
+  if (!currentStroke || event.pointerId !== drawingPointerId) return;
+  event.preventDefault();
+  const point = canvasPoint(event);
+  const previous = currentStroke.points[currentStroke.points.length - 1];
+  if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1) return;
+  currentStroke.points.push(point);
+  drawStrokeSegment(currentStroke, previous, point);
+}
+
+function endStroke(event) {
+  if (!currentStroke || event.pointerId !== drawingPointerId) return;
+  try {
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  } catch {
+    // Ignore pointer capture release errors.
+  }
+
+  if (currentStroke.points.length > 0) {
+    undoStack.push(strokeStartSnapshot || []);
+    redoStack = [];
+    strokes.push(currentStroke);
+  }
+
+  currentStroke = null;
+  strokeStartSnapshot = null;
+  drawingPointerId = null;
+  updateDrawingControls();
+  scheduleSave();
+}
+
+function drawStrokeDot(stroke, point) {
+  context.save();
+  context.globalCompositeOperation = stroke.erase
+    ? "destination-out"
+    : "source-over";
+  context.fillStyle = stroke.color;
+  context.beginPath();
+  context.arc(point.x, point.y, stroke.size / 2, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+}
+
+function drawStrokeSegment(stroke, from, to) {
+  context.save();
+  context.globalCompositeOperation = stroke.erase
+    ? "destination-out"
+    : "source-over";
+  context.strokeStyle = stroke.color;
+  context.lineWidth = stroke.size;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(to.x, to.y);
+  context.stroke();
+  context.restore();
+}
+
+function drawWholeStroke(stroke) {
+  if (stroke.points.length === 1) {
+    drawStrokeDot(stroke, stroke.points[0]);
+    return;
+  }
+
+  context.save();
+  context.globalCompositeOperation = stroke.erase
+    ? "destination-out"
+    : "source-over";
+  context.strokeStyle = stroke.color;
+  context.lineWidth = stroke.size;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(stroke.points[0].x, stroke.points[0].y);
+  for (let index = 1; index < stroke.points.length; index += 1) {
+    context.lineTo(stroke.points[index].x, stroke.points[index].y);
+  }
+  context.stroke();
+  context.restore();
+}
+
+function redrawCanvas() {
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  for (const stroke of strokes) {
+    drawWholeStroke(stroke);
+  }
+}
+
+function undoStroke() {
+  if (!canEditDrawing() || undoStack.length === 0) return;
+  redoStack.push(strokes.slice());
+  strokes = undoStack.pop();
+  redrawCanvas();
+  updateDrawingControls();
+  scheduleSave();
+}
+
+function redoStroke() {
+  if (!canEditDrawing() || redoStack.length === 0) return;
+  undoStack.push(strokes.slice());
+  strokes = redoStack.pop();
+  redrawCanvas();
+  updateDrawingControls();
+  scheduleSave();
+}
+
+function clearCanvas() {
+  if (!canEditDrawing() || strokes.length === 0) return;
+  undoStack.push(strokes.slice());
+  redoStack = [];
+  strokes = [];
+  redrawCanvas();
+  updateDrawingControls();
+  scheduleSave();
+}
+
+function toggleEraser() {
+  if (!canEditDrawing()) return;
+  eraserActive = !eraserActive;
+  updateDrawingControls();
+}
+
+function canEditDrawing() {
+  return Boolean(
+    gameState?.phase === "drawing" &&
+      drawingState?.can_edit &&
+      !currentStroke,
+  );
+}
+
+function buildDrawingData() {
+  return {
+    version: 1,
+    width: canvas.width,
+    height: canvas.height,
+    strokes: strokes.map((stroke) => ({
+      color: stroke.color,
+      size: roundCoord(stroke.size),
+      erase: Boolean(stroke.erase),
+      points: stroke.points.map((point) => ({
+        x: roundCoord(point.x),
+        y: roundCoord(point.y),
+      })),
+    })),
+  };
+}
+
+function scheduleSave() {
+  if (!canEditDrawing()) return;
+  window.clearTimeout(saveTimer);
+  setSaveStatus("Saving changes…");
+  saveTimer = window.setTimeout(() => {
+    saveDrawing();
+  }, DRAWING_SAVE_DELAY);
+}
+
+async function saveDrawing(force = false) {
+  if (!session || !canEditDrawing()) return false;
+  if (activeSave) {
+    await activeSave;
+  }
+  if (!session || !canEditDrawing()) return false;
+
+  const data = buildDrawingData();
+  const payload = JSON.stringify(data);
+  if (!force && payload === lastSavedPayload) {
+    setSaveStatus("All changes saved");
+    return true;
+  }
+
+  const currentSession = session;
+  let succeeded = false;
+  activeSave = (async () => {
+    try {
+      const result = await api.saveDrawing(
+        currentSession.roomCode,
+        currentSession.token,
+        data,
+      );
+      if (currentSession !== session) return;
+      drawingState = {
+        ...drawingState,
+        ...mutationFields(result),
+        data,
+      };
+      lastSavedPayload = payload;
+      setSaveStatus("All changes saved");
+      updateDrawingControls();
+      succeeded = true;
+    } catch (error) {
+      if (error instanceof ApiError && [401, 410].includes(error.status)) {
+        endSession("Your room session has expired.");
+        return;
+      }
+      if (error instanceof ApiError && error.status === 409) {
+        setSaveStatus("Drawing is locked", true);
+        await refreshGameState();
+        return;
+      }
+      setSaveStatus("Could not save. Retrying…", true);
+      window.clearTimeout(saveRetryTimer);
+      saveRetryTimer = window.setTimeout(() => {
+        if (canEditDrawing()) scheduleSave();
+      }, 1800);
+    } finally {
+      activeSave = null;
+    }
+  })();
+
+  await activeSave;
+  return succeeded;
+}
+
+async function handleSubmitOrReopen() {
+  if (!session || !gameState || !drawingState) return;
+  if (gameState.phase !== "drawing") return;
+
+  dom.submitDrawingBtn.disabled = true;
+  try {
+    if (drawingState.status === "submitted") {
+      const result = await api.unsubmitDrawing(
+        session.roomCode,
+        session.token,
+      );
+      drawingState = {
+        ...drawingState,
+        ...mutationFields(result),
+      };
+      setSaveStatus("Drawing reopened for editing");
+      updateDrawingControls();
+      showToast("You can edit your drawing again.", "success");
+      return;
+    }
+
+    window.clearTimeout(saveTimer);
+    const saved = await saveDrawing(true);
+    if (!saved || !drawingState || drawingState.status !== "draft") {
+      return;
+    }
+
+    const result = await api.submitDrawing(
+      session.roomCode,
+      session.token,
+    );
+    drawingState = {
+      ...drawingState,
+      ...mutationFields(result),
+    };
+    setSaveStatus("Drawing submitted");
+    updateDrawingControls();
+    showToast("Drawing submitted.", "success");
+  } catch (error) {
+    handleError(error);
+  } finally {
+    updateDrawingControls();
+  }
+}
+
+function updateDrawingControls() {
+  const canEdit = canEditDrawing();
+  const phase = gameState?.phase;
+  const status = drawingState?.status;
+
+  dom.brushColor.disabled = !canEdit;
+  dom.brushSize.disabled = !canEdit;
+  dom.eraserBtn.disabled = !canEdit;
+  dom.eraserBtn.classList.toggle("is-active", eraserActive);
+  dom.undoBtn.disabled = !canEdit || undoStack.length === 0;
+  dom.redoBtn.disabled = !canEdit || redoStack.length === 0;
+  dom.clearBtn.disabled = !canEdit || strokes.length === 0;
+  dom.brushSizeLabel.textContent = dom.brushSize.value;
+
+  let submitLabel = "Submit drawing";
+  let submitDisabled = true;
+  if (phase === "drawing") {
+    if (status === "submitted") {
+      submitLabel = "Reopen drawing";
+      submitDisabled = false;
+    } else if (status === "draft") {
+      submitLabel = "Submit drawing";
+      submitDisabled = false;
+    } else {
+      submitLabel = "Drawing locked";
+    }
+  } else if (phase === "drawing_completed") {
+    submitLabel = "Drawing locked";
+  }
+  dom.submitDrawingBtn.textContent = submitLabel;
+  dom.submitDrawingBtn.disabled = submitDisabled;
+
+  const showLock =
+    phase === "drawing" && status && status !== "draft";
+  dom.canvasLock.classList.toggle("hidden", !showLock);
+  if (showLock) {
+    if (status === "submitted") {
+      dom.canvasLockTitle.textContent = "Drawing submitted";
+      dom.canvasLockCopy.textContent =
+        "Reopen your drawing to keep editing before time runs out.";
+    } else {
+      dom.canvasLockTitle.textContent = "Drawing locked";
+      dom.canvasLockCopy.textContent =
+        "The drawing deadline has passed. Your saved drawing is safe.";
+    }
+  }
+  dom.drawingCanvas.classList.toggle("is-locked", !canEdit);
+}
+
+function flushDrawingOnExit() {
+  if (!session || !canEditDrawing()) return;
+  const data = buildDrawingData();
+  const payload = JSON.stringify(data);
+  if (payload === lastSavedPayload) return;
+  api.saveDrawingKeepalive(session.roomCode, session.token, data);
+}
+
+function updateCountdown() {
+  if (!gameState) return;
+
+  if (gameState.phase === "drawing_completed") {
+    dom.gameTimerLabel.textContent = "Drawing";
+    dom.gameTimer.textContent = "Locked";
+    dom.gameTimer.classList.remove("urgent");
+    return;
+  }
+
+  if (!gameState.phase_ends_at) {
+    dom.gameTimerLabel.textContent =
+      gameState.phase === "drawing" ? "Drawing time" : "Time left";
+    dom.gameTimer.textContent =
+      gameState.phase === "drawing" ? "Unlimited" : "--:--";
+    dom.gameTimer.classList.remove("urgent");
+    return;
+  }
+
+  dom.gameTimerLabel.textContent =
+    gameState.phase === "drawing" ? "Drawing ends in" : "Viewing ends in";
+  const endTime = Date.parse(gameState.phase_ends_at);
+  if (Number.isNaN(endTime)) return;
+
+  const remaining = Math.max(0, endTime - (Date.now() + clockOffsetMs));
+  dom.gameTimer.textContent = formatClock(remaining);
+  dom.gameTimer.classList.toggle(
+    "urgent",
+    remaining > 0 && remaining <= 30_000,
+  );
+
+  if (
+    remaining <= 0 &&
+    ["image_viewing", "drawing"].includes(gameState.phase) &&
+    !syncInFlight &&
+    Date.now() - lastSyncAttempt >= 1000
+  ) {
+    lastSyncAttempt = Date.now();
+    syncGameState();
+  }
+}
+
+async function syncGameState() {
+  if (!session || syncInFlight) return;
+  const currentSession = session;
+  syncInFlight = true;
+  try {
+    const state = await api.syncGame(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (currentSession !== session) return;
+    handleGameState(state);
+  } catch (error) {
+    if (error instanceof ApiError && [401, 410].includes(error.status)) {
+      endSession("Your room session has expired. Please join again.");
+    }
+  } finally {
+    syncInFlight = false;
+  }
+}
+
 function connectSocket() {
   if (!session) return;
   clearTimeout(reconnectTimer);
@@ -603,6 +1457,8 @@ function connectSocket() {
     }
     if (message.type === "lobby_state") {
       renderLobby(message.state);
+    } else if (message.type === "game_state") {
+      handleGameState(message.state);
     } else if (message.type === "error") {
       showToast(message.message || "Lobby error.");
     }
@@ -640,8 +1496,13 @@ function scheduleReconnect() {
 
   reconnectTimer = window.setTimeout(async () => {
     if (!session) return;
+    const currentSession = session;
     try {
-      const state = await api.getRoom(session.roomCode, session.token);
+      const state = await api.getRoom(
+        currentSession.roomCode,
+        currentSession.token,
+      );
+      if (currentSession !== session) return;
       renderLobby(state);
     } catch (error) {
       if (error instanceof ApiError && [401, 404, 410].includes(error.status)) {
@@ -651,18 +1512,6 @@ function scheduleReconnect() {
     }
     connectSocket();
   }, delay);
-}
-
-async function refreshRoomState() {
-  if (!session) return;
-  try {
-    const state = await api.getRoom(session.roomCode, session.token);
-    renderLobby(state);
-  } catch (error) {
-    if (error instanceof ApiError && [401, 404, 410].includes(error.status)) {
-      endSession("Your room session has expired. Please join again.");
-    }
-  }
 }
 
 function startHeartbeat() {
@@ -683,7 +1532,10 @@ function stopHeartbeat() {
 
 function leaveRoom(message, type = "error") {
   clearTimeout(reconnectTimer);
+  window.clearTimeout(saveTimer);
+  window.clearTimeout(saveRetryTimer);
   stopHeartbeat();
+  clearReferenceImage();
 
   if (socket) {
     socket.onclose = null;
@@ -693,18 +1545,26 @@ function leaveRoom(message, type = "error") {
 
   session = null;
   roomState = null;
+  gameState = null;
+  drawingState = null;
+  activeSave = null;
   imagesSignature = "";
   imagesRequestId += 1;
   revokeImageUrls();
   clearSession();
-
-  dom.lobbyView.classList.add("hidden");
-  dom.homeView.classList.remove("hidden");
+  resetDrawingCanvas();
+  setSaveStatus("All changes saved");
+  showRoomView("home");
+  dom.roomCode.textContent = "------";
   dom.playersList.replaceChildren();
   dom.imagesList.replaceChildren();
+  dom.gamePlayersList.replaceChildren();
+  dom.completedProgress.textContent = "";
   dom.uploadProgress.textContent = "";
   dom.imageInput.value = "";
   dom.readyBtn.disabled = false;
+  dom.startGameBtn.disabled = true;
+  dom.finishDrawingBtn.disabled = false;
   setConnection("offline");
 
   const url = new URL(window.location.href);
@@ -712,6 +1572,19 @@ function leaveRoom(message, type = "error") {
   window.history.replaceState({}, "", url);
 
   if (message) showToast(message, type);
+}
+
+function resetDrawingCanvas() {
+  strokes = [];
+  undoStack = [];
+  redoStack = [];
+  currentStroke = null;
+  strokeStartSnapshot = null;
+  drawingPointerId = null;
+  eraserActive = false;
+  lastSavedPayload = "";
+  if (context && canvas) redrawCanvas();
+  updateDrawingControls();
 }
 
 function endSession(message) {
@@ -740,8 +1613,15 @@ function setFormBusy(form, busy) {
   if (submit) {
     submit.disabled = busy;
     if (busy) submit.dataset.label = submit.textContent;
-    submit.textContent = busy ? "Please wait…" : submit.dataset.label || submit.textContent;
+    submit.textContent = busy
+      ? "Please wait…"
+      : submit.dataset.label || submit.textContent;
   }
+}
+
+function setSaveStatus(text, isError = false) {
+  dom.saveStatus.textContent = text;
+  dom.saveStatus.classList.toggle("error", isError);
 }
 
 function showToast(message, type = "error") {
@@ -763,6 +1643,20 @@ function handleError(error) {
     return;
   }
   showToast("Something went wrong. Please try again.");
+}
+
+function mutationFields(result) {
+  return {
+    status: result.status,
+    submitted_at: result.submitted_at,
+    updated_at: result.updated_at,
+    can_edit: result.can_edit,
+    can_submit: result.can_submit,
+    can_unsubmit: result.can_unsubmit,
+    phase: result.phase,
+    phase_ends_at: result.phase_ends_at,
+    server_time: result.server_time,
+  };
 }
 
 function makeBadge(text, className) {
@@ -799,6 +1693,21 @@ function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatClock(milliseconds) {
+  const totalSeconds = Math.ceil(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function roundCoord(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function revokeImageUrls() {

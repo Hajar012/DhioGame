@@ -1,3 +1,3 @@
-from app.api.routes import health, rooms, ws
+from app.api.routes import game, health, rooms, ws
 
-__all__ = ["health", "rooms", "ws"]
+__all__ = ["game", "health", "rooms", "ws"]

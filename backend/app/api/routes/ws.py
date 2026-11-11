@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.db.session import get_db
 from app.models import ConnectionStatus
-from app.services import realtime, rooms
+from app.services import games, realtime, rooms
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,15 @@ async def room_websocket(
     player.last_seen_at = datetime.now(timezone.utc)
     db.commit()
     await realtime.broadcast_room_state(room.join_code)
+    await realtime.broadcast_game_state(room.join_code)
 
     try:
         while True:
             message = await websocket.receive_text()
             if message.strip() == "ping":
+                game = games.get_current_game(db, room)
+                if game is not None and games.sync_game_state(db, game):
+                    await realtime.broadcast_game_state(room.join_code)
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
         pass
@@ -71,5 +75,6 @@ async def room_websocket(
                 player.last_seen_at = datetime.now(timezone.utc)
                 db.commit()
                 await realtime.broadcast_room_state(room.join_code)
+                await realtime.broadcast_game_state(room.join_code)
             except Exception:
                 logger.exception("Failed to mark player offline")

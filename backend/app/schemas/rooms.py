@@ -140,6 +140,7 @@ class RoomState(BaseModel):
     uploaded_images: int
     required_images: int
     uploads_complete: bool
+    can_start: bool
     created_at: datetime
     expires_at: datetime | None
 

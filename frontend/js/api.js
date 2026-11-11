@@ -108,6 +108,67 @@ export const api = {
     }
     return response.blob();
   },
+  getGame: (code, token) =>
+    request(`${roomPath(code)}/game`, { token }),
+  startGame: (code, token) =>
+    request(`${roomPath(code)}/game/start`, { method: "POST", token }),
+  syncGame: (code, token) =>
+    request(`${roomPath(code)}/game/sync`, { method: "POST", token }),
+  finishDrawing: (code, token) =>
+    request(`${roomPath(code)}/game/finish-drawing`, {
+      method: "POST",
+      token,
+    }),
+  fetchReferenceBlob: async (code, token) => {
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${roomPath(code)}/game/reference`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      throw new ApiError("Cannot reach the DhioGame server.", 0);
+    }
+    if (!response.ok) {
+      throw new ApiError(
+        "The reference image is not available.",
+        response.status,
+      );
+    }
+    return response.blob();
+  },
+  getDrawing: (code, token) =>
+    request(`${roomPath(code)}/drawing`, { token }),
+  saveDrawing: (code, token, data) =>
+    request(`${roomPath(code)}/drawing`, {
+      method: "PUT",
+      token,
+      body: { data },
+    }),
+  submitDrawing: (code, token) =>
+    request(`${roomPath(code)}/drawing/submit`, {
+      method: "POST",
+      token,
+    }),
+  unsubmitDrawing: (code, token) =>
+    request(`${roomPath(code)}/drawing/unsubmit`, {
+      method: "POST",
+      token,
+    }),
+  saveDrawingKeepalive: (code, token, data) => {
+    try {
+      fetch(`${API_BASE}${roomPath(code)}/drawing`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ data }),
+        keepalive: true,
+      });
+    } catch {
+      // Best-effort save on page exit.
+    }
+  },
   socketUrl: (code, token) =>
     `${WS_BASE}/api/ws/rooms/${encodeURIComponent(code.toUpperCase())}?token=${encodeURIComponent(token)}`,
 };

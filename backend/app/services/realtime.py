@@ -5,6 +5,7 @@ import uuid
 from fastapi import BackgroundTasks, WebSocket
 
 from app.db.session import SessionLocal
+from app.services import games
 from app.services.lobby import build_room_state
 from app.services.rooms import get_room_by_code
 
@@ -74,3 +75,24 @@ async def broadcast_room_state(room_code: str) -> None:
 
 def queue_room_state(background_tasks: BackgroundTasks, room_code: str) -> None:
     background_tasks.add_task(broadcast_room_state, room_code)
+
+
+async def broadcast_game_state(room_code: str) -> None:
+    with SessionLocal() as db:
+        room = get_room_by_code(db, room_code)
+        if room is None:
+            return
+        game = games.get_current_game(db, room)
+        if game is None:
+            return
+        games.sync_game_state(db, game)
+        state = games.build_game_state(db, room, game)
+
+    await manager.broadcast(
+        room.join_code,
+        {"type": "game_state", "state": state.model_dump(mode="json")},
+    )
+
+
+def queue_game_state(background_tasks: BackgroundTasks, room_code: str) -> None:
+    background_tasks.add_task(broadcast_game_state, room_code)

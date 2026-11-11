@@ -19,6 +19,23 @@
     </header>
 
     <main>
+      <section id="room-header" class="lobby-topbar card hidden">
+        <div class="room-identity">
+          <p class="eyebrow">Private room</p>
+          <div class="room-code-line">
+            <h1 id="room-code">------</h1>
+            <button id="copy-code-btn" class="button button-ghost button-small" type="button">Copy code</button>
+          </div>
+        </div>
+        <div class="lobby-actions">
+          <span id="connection-status" class="connection-badge connection-connecting">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="connection-label">Connecting</span>
+          </span>
+          <button id="leave-btn" class="button button-ghost" type="button">Leave room</button>
+        </div>
+      </section>
+
       <section id="home-view" class="view">
         <div class="hero">
           <div>
@@ -95,23 +112,6 @@
       </section>
 
       <section id="lobby-view" class="view hidden" aria-live="polite">
-        <div class="lobby-topbar card">
-          <div class="room-identity">
-            <p class="eyebrow">Private room</p>
-            <div class="room-code-line">
-              <h1 id="room-code">------</h1>
-              <button id="copy-code-btn" class="button button-ghost button-small" type="button">Copy code</button>
-            </div>
-          </div>
-          <div class="lobby-actions">
-            <span id="connection-status" class="connection-badge connection-connecting">
-              <span class="status-dot" aria-hidden="true"></span>
-              <span id="connection-label">Connecting</span>
-            </span>
-            <button id="leave-btn" class="button button-ghost" type="button">Leave room</button>
-          </div>
-        </div>
-
         <div class="lobby-grid">
           <section class="card players-card">
             <div class="card-heading card-heading-row">
@@ -156,6 +156,11 @@
               <span class="setting-summary-label">Current setup</span>
               <strong id="settings-summary">Same image · 20s view · 3 min draw</strong>
             </div>
+
+            <div id="host-start" class="host-start hidden">
+              <button id="start-game-btn" class="button button-primary" type="button">Start game</button>
+              <p id="start-hint" class="start-hint"></p>
+            </div>
           </section>
 
           <section class="card images-card">
@@ -180,6 +185,85 @@
             <ul id="images-list" class="images-list"></ul>
             <p id="images-complete" class="complete-note hidden">All reference images are ready.</p>
           </section>
+        </div>
+      </section>
+
+      <section id="game-view" class="view hidden" aria-live="polite">
+        <div class="game-grid">
+          <section class="card game-stage-card">
+            <div class="game-phase-head">
+              <div>
+                <p id="game-phase-eyebrow" class="eyebrow">Game</p>
+                <h2 id="game-phase-title">Get ready</h2>
+                <p id="game-phase-copy" class="game-phase-copy">The host is starting the round.</p>
+              </div>
+              <div class="game-timer">
+                <span id="game-timer-label">Time left</span>
+                <strong id="game-timer">--:--</strong>
+              </div>
+            </div>
+
+            <div id="viewing-panel" class="game-panel hidden">
+              <div class="reference-frame">
+                <img id="reference-image" alt="Your reference image" class="hidden">
+                <div id="reference-placeholder" class="reference-placeholder">Loading your reference image…</div>
+              </div>
+              <p class="game-note">Memorize the image. It disappears when the countdown ends.</p>
+            </div>
+
+            <div id="drawing-panel" class="game-panel hidden">
+              <div class="canvas-wrap">
+                <canvas id="drawing-canvas" width="1600" height="1000"></canvas>
+                <div id="canvas-lock" class="canvas-lock hidden">
+                  <strong id="canvas-lock-title">Drawing submitted</strong>
+                  <p id="canvas-lock-copy">Reopen your drawing to keep editing.</p>
+                </div>
+              </div>
+
+              <div class="drawing-toolbar">
+                <label class="tool tool-color" for="brush-color">
+                  <span>Color</span>
+                  <input id="brush-color" type="color" value="#1b1b1f">
+                </label>
+                <label class="tool tool-size" for="brush-size">
+                  <span>Brush <em id="brush-size-label">10</em></span>
+                  <input id="brush-size" type="range" min="2" max="60" value="10">
+                </label>
+                <button id="eraser-btn" class="tool-button" type="button">Eraser</button>
+                <button id="undo-btn" class="tool-button" type="button">Undo</button>
+                <button id="redo-btn" class="tool-button" type="button">Redo</button>
+                <button id="clear-btn" class="tool-button" type="button">Clear</button>
+              </div>
+
+              <div class="drawing-actions">
+                <p id="save-status" class="save-status">All changes saved</p>
+                <button id="submit-drawing-btn" class="button button-primary" type="button">Submit drawing</button>
+              </div>
+            </div>
+
+            <div id="completed-panel" class="game-panel hidden">
+              <div class="completed-mark" aria-hidden="true">D</div>
+              <h3>Drawing time is over</h3>
+              <p>All drawings are locked. The reveal system arrives in the next milestone.</p>
+              <p id="completed-progress" class="completed-progress"></p>
+            </div>
+
+            <div id="host-game-controls" class="host-game-controls hidden">
+              <button id="finish-drawing-btn" class="button button-secondary" type="button">End drawing now</button>
+            </div>
+          </section>
+
+          <aside class="card game-side-card">
+            <div class="card-heading card-heading-row">
+              <div>
+                <h2>Progress</h2>
+                <p id="game-progress-summary">0 submitted</p>
+              </div>
+              <span id="game-player-count" class="pill">0 players</span>
+            </div>
+            <ul id="game-players-list" class="players-list"></ul>
+            <p id="game-mode-label" class="game-mode-label">Same image mode</p>
+          </aside>
         </div>
       </section>
     </main>

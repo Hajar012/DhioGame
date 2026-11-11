@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import GameMode, Player, ReferenceImage, Room
+from app.models import GameMode, Player, ReferenceImage, Room, RoomStatus
 from app.schemas.rooms import (
     PlayerResponse,
     ReferenceImageResponse,
@@ -63,6 +63,11 @@ def build_room_state(db: Session, room: Room) -> RoomState:
         uploaded_images=uploaded,
         required_images=required,
         uploads_complete=uploaded >= required,
+        can_start=(
+            room.status == RoomStatus.WAITING
+            and len(players) >= MIN_PLAYERS
+            and uploaded == required
+        ),
         created_at=room.created_at,
         expires_at=room.expires_at,
     )
