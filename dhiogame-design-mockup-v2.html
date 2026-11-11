@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DhioGame — Design Direction v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800;900&family=Rye&display=swap');
+:root{
+ --sky:#398bc5;--sky2:#2876ad;--dot:#a9e6f0;--cyan:#15b7e5;--cyan-pale:#c9f0f5;
+ --yellow:#ffdb31;--coral:#ff7e88;--pink:#f49acb;--mint:#82dfbd;
+ --ink:#17171b;--paper:#fffdf8;--muted:#64717b;--line:3px solid var(--ink);
+ --shadow:5px 6px 0 var(--ink);--soft-shadow:3px 4px 0 var(--ink);
+}
+*{box-sizing:border-box}body{margin:0;background:#e9eef2;color:var(--ink);font-family:Nunito,Arial,sans-serif}
+button,input,select{font:inherit}button{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px dashed var(--coral);outline-offset:3px}
+.page{min-height:100vh;padding:24px;display:grid;place-items:center}
+.stage{position:relative;isolation:isolate;overflow:hidden;width:min(1240px,100%);min-height:760px;padding:24px clamp(18px,4vw,52px) 38px;border:7px solid var(--ink);box-shadow:0 11px 0 var(--ink),0 24px 55px #243b5030;background-color:var(--sky);background-image:radial-gradient(circle,var(--dot) 0 6px,transparent 6.8px);background-size:39px 39px}
+.stage:before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(145deg,#ffffff09,#092b4b10)}
+.stage.playing{background-image:radial-gradient(circle,#bcebf0 0 3px,transparent 3.8px);background-size:31px 31px}
+.stage.playing:before{background:#398bc5ed}
+header{height:76px;display:flex;align-items:center;justify-content:space-between;position:relative;z-index:2}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.brand-mark{width:53px;height:53px;display:grid;place-items:center;background:var(--yellow);border:var(--line);border-radius:16px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-5deg)}
+.brand-mark svg{width:43px;height:43px}
+.brand-name{font-family:Rye,Georgia,serif;font-size:1.75rem;letter-spacing:1px;text-shadow:2px 2px 0 #bcebf0}
+.brand-name span{display:block;font:800 .58rem Nunito,sans-serif;letter-spacing:3px;text-align:center;text-shadow:none;color:#fff;margin-top:1px}
+.header-right{display:flex;align-items:center;gap:10px}
+.pill{background:var(--paper);border:2px solid var(--ink);border-radius:999px;padding:8px 13px;font-weight:900;font-size:.85rem;box-shadow:2px 3px 0 var(--ink)}
+.screen{display:none;animation:enter .22s ease}.screen.active{display:block}
+@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* mascot */
+.mascot{width:190px;height:185px;position:relative;filter:drop-shadow(4px 5px 0 var(--ink))}
+.mascot svg{width:100%;height:100%;overflow:visible}
+.mascot-tag{position:absolute;right:-30px;top:10px;background:var(--yellow);border:2px solid var(--ink);padding:6px 11px;border-radius:14px 14px 14px 2px;font-weight:900;transform:rotate(7deg)}
+/* home */
+.home{min-height:625px;display:grid;grid-template-columns:1fr .9fr;align-items:center;gap:28px;max-width:1000px;margin:auto}
+.home-copy{padding:25px 0 35px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--yellow);border:2px solid var(--ink);padding:7px 13px;border-radius:999px;font-weight:900;box-shadow:2px 3px 0 var(--ink);transform:rotate(-2deg)}
+h1{font-size:clamp(3.5rem,7vw,6.4rem);line-height:.9;letter-spacing:-3px;margin:25px 0 16px;font-weight:900;color:#fff;text-shadow:4px 5px 0 var(--ink),7px 8px 0 #17679a}
+h1 em{font-style:normal;color:var(--yellow)}
+.lead{font-size:1.15rem;font-weight:800;max-width:420px;line-height:1.5;color:#fff;text-shadow:1px 2px 0 #216b9c}
+.actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:27px}
+.btn{border:var(--line);border-radius:14px;padding:13px 22px;font-weight:900;font-size:1.05rem;box-shadow:var(--shadow);transition:transform .14s,box-shadow .14s}
+.btn:hover{transform:translate(-2px,-2px);box-shadow:7px 8px 0 var(--ink)}
+.btn:active{transform:translate(2px,3px);box-shadow:1px 2px 0 var(--ink)}
+.btn.yellow{background:var(--yellow)}.btn.cyan{background:var(--cyan)}.btn.paper{background:var(--paper)}
+.home-art{display:grid;place-items:center;position:relative;min-height:440px}
+.home-art .mascot{width:min(340px,80%);height:330px;transform:rotate(4deg)}
+.burst{position:absolute;font-size:2.6rem;font-weight:900;color:var(--yellow);text-shadow:2px 3px var(--ink)}
+.burst.one{top:40px;left:12%}.burst.two{right:5%;bottom:65px;color:var(--coral);transform:rotate(18deg)}
+.doodle{position:absolute;border:3px solid var(--ink);border-radius:50%;width:40px;height:40px}
+.doodle.a{top:90px;right:18%;background:var(--pink)}.doodle.b{bottom:40px;left:13%;background:var(--mint);width:25px;height:25px}
+/* forms and lobby */
+.card{width:min(720px,100%);margin:30px auto 0;background:var(--paper);border:4px solid var(--ink);border-radius:22px;padding:25px;box-shadow:8px 9px 0 var(--ink);position:relative}
+.card:after{content:"";position:absolute;width:42px;height:14px;background:var(--yellow);border:2px solid var(--ink);top:-10px;left:35px;transform:rotate(-4deg)}
+.card h2{font-size:2rem;margin:0 0 18px;text-align:center;font-weight:900}
+.field{margin:13px 0;display:grid;gap:7px}.field label{font-weight:900;font-size:.95rem}
+.field input,.field select{width:100%;padding:12px 14px;border:2px solid var(--ink);border-radius:10px;background:white;font-weight:700}
+.choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.choice{border:2px solid var(--ink);border-radius:14px;padding:16px;background:var(--cyan-pale);text-align:left;box-shadow:2px 3px 0 var(--ink)}
+.choice b{display:block;font-size:1.15rem}.choice small{display:block;color:#46545d;font-weight:700;margin-top:4px;line-height:1.35}
+.choice.selected{background:var(--yellow);box-shadow:inset 0 0 0 2px white,3px 4px 0 var(--ink)}
+.card-actions{display:flex;justify-content:center;gap:13px;flex-wrap:wrap;margin-top:22px}
+.back{background:var(--paper)}
+.room-code{display:flex;align-items:center;justify-content:center;gap:12px;background:var(--cyan-pale);border:2px dashed var(--ink);border-radius:13px;padding:13px;margin:12px 0 20px}
+.room-code strong{font-size:1.8rem;letter-spacing:7px}
+.players{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.player{background:#fff;border:2px solid var(--ink);border-radius:13px;padding:12px;display:flex;align-items:center;gap:10px;font-weight:900}
+.avatar{width:38px;height:38px;border:2px solid var(--ink);border-radius:50%;display:grid;place-items:center;background:var(--pink);font-size:1.2rem}
+.player:nth-child(2) .avatar{background:var(--mint)}.player:nth-child(3) .avatar{background:var(--yellow)}
+.player small{display:block;color:var(--muted);font-size:.75rem}
+.section-label{font-size:.83rem;text-transform:uppercase;letter-spacing:1px;font-weight:900;color:var(--muted);margin:17px 0 8px}
+/* game */
+.game-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 18px}
+.game-title{font-size:1.3rem;font-weight:900;color:#fff;text-shadow:2px 2px #1b6597}
+.timer{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--yellow);border:4px solid var(--ink);box-shadow:3px 4px 0 var(--ink);font-size:1.25rem;font-weight:900}
+.draw-area{max-width:1000px;margin:auto;display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:0;filter:drop-shadow(5px 6px 0 var(--ink))}
+.canvas{min-height:475px;background:var(--paper);border:3px solid var(--ink);border-radius:17px 0 0 17px;position:relative;overflow:hidden}
+.canvas:before{content:"";position:absolute;inset:0;background-image:linear-gradient(#dce5e955 1px,transparent 1px),linear-gradient(90deg,#dce5e955 1px,transparent 1px);background-size:26px 26px;opacity:.35}
+.canvas-hint{position:absolute;top:14px;left:17px;color:#a1a5a8;font-size:.85rem;font-weight:800;z-index:1}
+.sketch{position:absolute;width:58%;height:60%;left:21%;top:21%;z-index:1}
+.toolbar{background:#d9dde0;border:3px solid var(--ink);border-left:0;border-radius:0 17px 17px 0;padding:12px 9px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tool-btn{width:100%;border:2px solid var(--ink);border-radius:9px;background:#fff;padding:8px 2px;font-size:.76rem;font-weight:900;box-shadow:1px 2px 0 var(--ink)}
+.tool-btn.active{background:var(--yellow)}
+.palette{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.swatch{width:25px;height:25px;border:2px solid var(--ink);border-radius:7px}
+.game-bottom{max-width:1000px;margin:18px auto 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.progress{display:flex;gap:7px;flex-wrap:wrap}
+.progress span{background:var(--paper);border:2px solid var(--ink);border-radius:999px;padding:7px 11px;font-size:.8rem;font-weight:900}
+.submit{background:var(--yellow);font-size:1.35rem;padding:12px 32px}
+/* reveal */
+.reveal-wrap{max-width:1050px;margin:20px auto}
+.reveal-grid{display:grid;grid-template-columns:minmax(0,1fr) 205px;gap:14px}
+.compare{background:var(--paper);border:4px solid var(--ink);border-radius:18px;padding:17px;box-shadow:5px 6px 0 var(--ink)}
+.compare-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px}
+.compare-head h2{margin:0;font-size:1.5rem}.step{background:var(--yellow);border:2px solid var(--ink);padding:5px 11px;border-radius:999px;font-weight:900}
+.pair{display:grid;grid-template-columns:1fr 36px 1fr;align-items:center;gap:10px}
+.art-card{min-width:0}.art-box{height:300px;background:#fff;border:3px solid var(--ink);border-radius:12px;display:grid;place-items:center;overflow:hidden}
+.art-box svg{width:90%;height:90%}.art-caption{text-align:center;font-weight:900;margin-top:9px}
+.compare-arrow{text-align:center;font-size:2rem;font-weight:900;color:var(--coral);text-shadow:1px 2px var(--ink)}
+.original-hidden{font-weight:900;color:#87929a;text-align:center;padding:15px}
+.reveal-players{background:var(--cyan-pale);border:3px solid var(--ink);border-radius:16px;padding:13px;box-shadow:4px 5px 0 var(--ink)}
+.reveal-players h3{margin:0 0 10px;font-size:1.1rem}.reveal-player{padding:9px;background:#fff;border:2px solid var(--ink);border-radius:9px;margin:7px 0;font-weight:900}
+.reveal-player.current{background:var(--yellow)}
+.note{text-align:center;color:white;font-weight:800;margin-top:18px;text-shadow:1px 2px #216b9c}
+@media(max-width:760px){
+ .page{padding:0}.stage{min-height:100vh;border-width:5px;padding:15px 14px 30px;box-shadow:none}
+ header{height:65px}.brand-name{font-size:1.35rem}.brand-mark{width:43px;height:43px}.header-right .pill{font-size:.72rem;padding:6px 9px}
+ .home{grid-template-columns:1fr;min-height:calc(100vh - 100px);text-align:center;gap:0}.home-copy{padding:35px 0 0}.lead{margin:auto}
+ .home-art{min-height:250px;grid-row:1}.home-art .mascot{width:205px;height:205px}.home h1{margin-top:20px}
+ .actions{justify-content:center}.card{margin-top:20px;padding:19px}.draw-area{grid-template-columns:minmax(0,1fr) 72px}
+ .canvas{min-height:390px}.toolbar{padding:8px 5px}.swatch{width:22px;height:22px}
+ .reveal-grid{grid-template-columns:1fr}.reveal-players{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.reveal-players h3{width:100%;margin-bottom:0}.reveal-player{margin:0}
+ .art-box{height:235px}
+}
+@media(max-width:460px){
+ .choice-grid,.players{grid-template-columns:1fr}.pair{grid-template-columns:1fr;gap:8px}.compare-arrow{transform:rotate(90deg);font-size:1.5rem}
+ .art-box{height:190px}.draw-area{grid-template-columns:minmax(0,1fr) 65px}.canvas{min-height:340px}
+ .tool-btn{font-size:.68rem}.timer{width:63px;height:63px;font-size:1rem}
+ .game-bottom{justify-content:center}.progress{justify-content:center}
+}
+</style>
+</head>
+<body>
+<div class="page"><main class="stage" id="stage">
+<header>
+ <a class="brand" href="#" onclick="show('home');return false">
+  <span class="brand-mark">
+   <svg viewBox="0 0 100 100" aria-label="DhioGame scorpion mascot"><g fill="#17171b" stroke="#17171b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M39 56Q19 47 13 67L5 77M29 59L10 55L4 62M42 68L30 86L18 91M58 67L73 84L88 87M65 57L83 54L94 64"/><ellipse cx="49" cy="48" rx="18" ry="21"/><path d="M60 37Q76 25 83 35L95 26L89 42L76 44L65 52Z"/><path d="M43 29Q31 12 48 8Q62 5 61 21" fill="none" stroke-width="7"/></g><circle cx="44" cy="44" r="2.5" fill="#fff"/><circle cx="54" cy="44" r="2.5" fill="#fff"/></svg>
+  </span>
+  <span class="brand-name">DHIO GAME<span>DRAW • PLAY • REVEAL</span></span>
+ </a>
+ <div class="header-right"><span class="pill">A little chaos, a lot of fun ✦</span></div>
+</header>
+
+<section class="screen active" id="home">
+ <div class="home">
+  <div class="home-copy">
+   <span class="eyebrow">✦ THE DRAWING PARTY ✦</span>
+   <h1>LET'S GET<br><em>DOODLING!</em></h1>
+   <p class="lead">Grab your friends, get a mystery image, and see what everyone comes up with.</p>
+   <div class="actions"><button class="btn yellow" onclick="show('create')">Create a room <span>↗</span></button><button class="btn paper" onclick="show('join')">Join a room</button></div>
+  </div>
+  <div class="home-art">
+   <span class="burst one">✳</span><span class="burst two">WOW!</span><span class="doodle a"></span><span class="doodle b"></span>
+   <div class="mascot">
+    <svg viewBox="0 0 260 250" role="img" aria-label="DhioGame scorpion mascot">
+     <g stroke="#17171b" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M111 153Q70 134 55 169L27 190M79 159L45 150L26 163M106 178L84 213L57 226M157 177L183 207L216 214M171 154L209 143L233 161" fill="none"/>
+      <path d="M163 112Q201 75 216 93L239 75L230 111L202 121L178 137" fill="none"/>
+      <ellipse cx="127" cy="137" rx="47" ry="54" fill="#17171b"/>
+      <path d="M96 94Q70 56 100 35Q130 14 146 51" fill="none"/>
+      <path d="M91 112Q69 99 58 111M164 111Q183 98 194 109" fill="none"/>
+     </g>
+     <ellipse cx="112" cy="128" rx="7" ry="10" fill="#fff"/><ellipse cx="145" cy="128" rx="7" ry="10" fill="#fff"/>
+     <circle cx="114" cy="130" r="3.5" fill="#17171b"/><circle cx="147" cy="130" r="3.5" fill="#17171b"/>
+     <path d="M117 153Q130 166 145 151" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+     <path d="M91 105L105 111M151 109L165 102" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+     <path d="M213 79Q227 42 249 54Q263 62 245 78" fill="#ffdb31" stroke="#17171b" stroke-width="8"/>
+    </svg>
+    <span class="mascot-tag">HEY, YOU!</span>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section class="screen" id="create">
+ <div class="card">
+  <h2>Set up your game <span>✎</span></h2>
+  <div class="field"><label>Your nickname</label><input placeholder="What should we call you?" value="Doodle Master"></div>
+  <div class="section-label">Choose your game mode</div>
+  <div class="choice-grid">
+   <button class="choice selected" onclick="choose(this)"><b>🎲 Mystery Mix</b><small>Everyone gets a different secret image.</small></button>
+   <button class="choice" onclick="choose(this)"><b>🖼 Same Picture</b><small>Everyone draws the same image.</small></button>
+  </div>
+  <div class="choice-grid" style="margin-top:13px">
+   <div class="field"><label>👀 Viewing time</label><select><option>10 seconds</option><option>20 seconds</option><option>30 seconds</option><option>60 seconds</option></select></div>
+   <div class="field"><label>✏️ Drawing time</label><select><option>3 minutes</option><option>5 minutes</option><option>Unlimited</option></select></div>
+  </div>
+  <div class="card-actions"><button class="btn back" onclick="show('home')">Go back</button><button class="btn yellow" onclick="show('lobby')">Create room ↗</button></div>
+ </div>
+</section>
+
+<section class="screen" id="join">
+ <div class="card" style="max-width:560px">
+  <h2>Jump into a room!</h2>
+  <div class="field"><label>Your nickname</label><input placeholder="Pick a fun nickname"></div>
+  <div class="field"><label>Room code</label><input maxlength="6" placeholder="ENTER CODE" style="text-align:center;letter-spacing:8px;font-size:1.35rem;text-transform:uppercase"></div>
+  <div class="card-actions"><button class="btn back" onclick="show('home')">Go back</button><button class="btn yellow" onclick="show('lobby')">Let's go!</button></div>
+ </div>
+</section>
+
+<section class="screen" id="lobby">
+ <div class="card">
+  <h2>Waiting for the crew...</h2>
+  <div class="room-code"><span>ROOM CODE</span><strong>D7K9PX</strong><button class="btn cyan" style="padding:7px 12px" onclick="this.textContent='Copied!'">Copy</button></div>
+  <div class="section-label">Players in the room · 2 / 10</div>
+  <div class="players"><div class="player"><span class="avatar">♟</span><span>Doodle Master<small>👑 Host · Ready</small></span></div><div class="player"><span class="avatar">✿</span><span>PixelPal<small>Ready</small></span></div></div>
+  <div class="section-label">Reference pictures</div>
+  <div class="field"><input type="file" multiple accept="image/png,image/jpeg,image/webp"></div>
+  <div class="card-actions"><button class="btn back" onclick="show('create')">Game settings</button><button class="btn yellow" onclick="show('drawing')">Start game ✦</button></div>
+ </div>
+</section>
+
+<section class="screen" id="drawing">
+ <div class="game-top"><span class="game-title">DRAW YOUR HEART OUT ✎</span><span class="pill">ROOM · D7K9PX</span><div class="timer">02:53</div></div>
+ <div class="draw-area">
+  <div class="canvas"><span class="canvas-hint">Your canvas. Your masterpiece.</span>
+   <svg class="sketch" viewBox="0 0 400 300"><path d="M94 178C49 108 126 57 194 111C253 54 346 100 316 183C289 258 151 265 94 178Z" fill="none" stroke="#f04b5b" stroke-width="15" stroke-linecap="round"/><path d="M194 112Q185 63 218 47M188 110Q153 75 145 54" fill="none" stroke="#56b879" stroke-width="13" stroke-linecap="round"/><path d="M145 55l-3 22 22-7M218 47l-17 12 22 8" fill="none" stroke="#56b879" stroke-width="8" stroke-linecap="round"/></svg>
+  </div>
+  <aside class="toolbar"><div class="palette"><i class="swatch" style="background:#f04b5b"></i><i class="swatch" style="background:#ff9d35"></i><i class="swatch" style="background:#ffdf3d"></i><i class="swatch" style="background:#55b978"></i><i class="swatch" style="background:#398bc5"></i><i class="swatch" style="background:#a56bc5"></i><i class="swatch" style="background:#fff"></i><i class="swatch" style="background:#17171b"></i></div><button class="tool-btn active">Brush</button><button class="tool-btn">Eraser</button><button class="tool-btn">Size</button><button class="tool-btn">↶ Undo</button><button class="tool-btn">↷ Redo</button><button class="tool-btn">Clear</button></aside>
+ </div>
+ <div class="game-bottom"><div class="progress"><span>✿ PixelPal · Submitted</span><span>♟ You · Drawing</span></div><button class="btn submit" onclick="show('reveal')">SUBMIT MY ART!</button></div>
+</section>
+
+<section class="screen" id="reveal">
+ <div class="game-top"><span class="game-title">THE BIG REVEAL! ✨</span><span class="pill">ROOM · D7K9PX</span><span class="pill">1 OF 2</span></div>
+ <div class="reveal-wrap"><div class="reveal-grid">
+  <div class="compare">
+   <div class="compare-head"><h2>PixelPal's masterpiece</h2><span class="step">ROUND 1</span></div>
+   <div class="pair">
+    <div class="art-card"><div class="art-box" id="original"><div class="original-hidden">🔒<br>Original is still a mystery!</div></div><div class="art-caption">The original</div></div>
+    <div class="compare-arrow">➜</div>
+    <div class="art-card"><div class="art-box"><svg viewBox="0 0 400 300"><path d="M94 178C49 108 126 57 194 111C253 54 346 100 316 183C289 258 151 265 94 178Z" fill="none" stroke="#f04b5b" stroke-width="15" stroke-linecap="round"/><path d="M194 112Q185 63 218 47" fill="none" stroke="#56b879" stroke-width="13" stroke-linecap="round"/></svg></div><div class="art-caption">PixelPal's drawing</div></div>
+   </div>
+  </div>
+  <aside class="reveal-players"><h3>Who's up?</h3><div class="reveal-player current">✿ PixelPal</div><div class="reveal-player">♟ Doodle Master</div></aside>
+ </div>
+ <div class="card-actions"><button class="btn cyan" onclick="document.getElementById('original').innerHTML='<div style=&quot;font-size:7rem&quot;>🍎</div>'">Reveal original</button><button class="btn yellow" onclick="show('done')">Next player →</button></div>
+ <p class="note">The host is in charge. Everyone else gets the popcorn 🍿</p></div>
+</section>
+
+<section class="screen" id="done">
+ <div class="card" style="text-align:center;margin-top:130px"><div style="font-size:4rem">🎉</div><h2>That's a wrap!</h2><p style="font-weight:800">All masterpieces have been revealed.</p><div class="card-actions"><button class="btn yellow" onclick="show('home')">Back to home</button></div></div>
+</section>
+</main></div>
+<script>
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.getElementById('stage').classList.toggle('playing',['drawing','reveal'].includes(id));window.scrollTo({top:0,behavior:'smooth'})}
+function choose(el){el.parentElement.querySelectorAll('.choice').forEach(x=>x.classList.remove('selected'));el.classList.add('selected')}
+</script>
+</body>
+</html>

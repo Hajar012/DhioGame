@@ -2,324 +2,359 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="dhiogame-api-base" content="http://127.0.0.1:8000">
-  <meta name="description" content="DhioGame — a private multiplayer drawing game.">
-  <title>DhioGame</title>
+  <meta name="description" content="DhioGame — a private multiplayer drawing party.">
+  <title>DhioGame — Draw, Play, Reveal</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="site-header">
-      <a class="brand" href="./" aria-label="DhioGame home">
-        <span class="brand-mark" aria-hidden="true">D</span>
-        <span>DhioGame</span>
-      </a>
-      <p class="tagline">Draw together. Reveal the chaos.</p>
-    </header>
-
-    <main>
-      <section id="room-header" class="lobby-topbar card hidden">
-        <div class="room-identity">
-          <p class="eyebrow">Private room</p>
-          <div class="room-code-line">
-            <h1 id="room-code">------</h1>
-            <button id="copy-code-btn" class="button button-ghost button-small" type="button">Copy code</button>
-          </div>
-        </div>
-        <div class="lobby-actions">
-          <span id="connection-status" class="connection-badge connection-connecting">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span id="connection-label">Connecting</span>
+  <div class="page">
+    <main class="stage" id="stage">
+      <header class="site-header">
+        <a id="brand-link" class="brand" href="./" aria-label="DhioGame home">
+          <span class="brand-mark">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><g fill="#17171b" stroke="#17171b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M39 56Q19 47 13 67L5 77M29 59L10 55L4 62M42 68L30 86L18 91M58 67L73 84L88 87M65 57L83 54L94 64"/><ellipse cx="49" cy="48" rx="18" ry="21"/><path d="M60 37Q76 25 83 35L95 26L89 42L76 44L65 52Z"/><path d="M43 29Q31 12 48 8Q62 5 61 21" fill="none" stroke-width="7"/></g><circle cx="44" cy="44" r="2.5" fill="#fff"/><circle cx="54" cy="44" r="2.5" fill="#fff"/></svg>
           </span>
-          <button id="leave-btn" class="button button-ghost" type="button">Leave room</button>
+          <span class="brand-name">DHIO GAME<span>DRAW • PLAY • REVEAL</span></span>
+        </a>
+        <div class="header-right">
+          <span class="pill fun-pill">A little chaos, a lot of fun ✦</span>
+          <div id="header-room-actions" class="header-room-actions hidden">
+            <span id="connection-status" class="pill connection-badge connection-connecting">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="connection-label">Connecting</span>
+            </span>
+            <button id="leave-btn" class="btn btn-small paper" type="button">Leave room</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- HOME -->
+      <section id="home-view" class="screen" aria-live="polite">
+        <div class="home">
+          <div class="home-copy">
+            <span class="eyebrow">✦ THE DRAWING PARTY ✦</span>
+            <h1>LET'S GET<br><em>DOODLING!</em></h1>
+            <p class="lead">Grab your friends, get a mystery image, and see what everyone comes up with.</p>
+            <div class="actions">
+              <button id="home-create-btn" class="btn yellow" type="button">Create a room <span>↗</span></button>
+              <button id="home-join-btn" class="btn paper" type="button">Join a room</button>
+            </div>
+          </div>
+          <div class="home-art">
+            <span class="burst one">✳</span>
+            <span class="burst two">WOW!</span>
+            <span class="doodle a"></span>
+            <span class="doodle b"></span>
+            <div class="mascot">
+              <svg viewBox="0 0 260 250" role="img" aria-label="DhioGame scorpion mascot">
+                <g stroke="#17171b" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M111 153Q70 134 55 169L27 190M79 159L45 150L26 163M106 178L84 213L57 226M157 177L183 207L216 214M171 154L209 143L233 161" fill="none"/>
+                  <path d="M163 112Q201 75 216 93L239 75L230 111L202 121L178 137" fill="none"/>
+                  <ellipse cx="127" cy="137" rx="47" ry="54" fill="#17171b"/>
+                  <path d="M96 94Q70 56 100 35Q130 14 146 51" fill="none"/>
+                  <path d="M91 112Q69 99 58 111M164 111Q183 98 194 109" fill="none"/>
+                </g>
+                <ellipse cx="112" cy="128" rx="7" ry="10" fill="#fff"/>
+                <ellipse cx="145" cy="128" rx="7" ry="10" fill="#fff"/>
+                <circle cx="114" cy="130" r="3.5" fill="#17171b"/>
+                <circle cx="147" cy="130" r="3.5" fill="#17171b"/>
+                <path d="M117 153Q130 166 145 151" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+                <path d="M91 105L105 111M151 109L165 102" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+                <path d="M213 79Q227 42 249 54Q263 62 245 78" fill="#ffdb31" stroke="#17171b" stroke-width="8"/>
+              </svg>
+              <span class="mascot-tag">HEY, YOU!</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section id="home-view" class="view">
-        <div class="hero">
-          <div>
-            <p class="eyebrow">Private multiplayer drawing</p>
-            <h1>Sketch, laugh, reveal.</h1>
-            <p class="hero-copy">
-              Create a private room, invite your friends, and draw from the same
-              image or from secret random references. No accounts. Just chaos.
-            </p>
-            <ul class="feature-list">
-              <li>2–10 players per room</li>
-              <li>Host-controlled rounds</li>
-              <li>Works on desktop and mobile</li>
-            </ul>
+      <!-- CREATE -->
+      <section id="create-view" class="screen hidden" aria-live="polite">
+        <form id="create-form" class="card setup-card">
+          <h2>Set up your game <span>✎</span></h2>
+
+          <div class="field">
+            <label for="create-nickname">Your nickname</label>
+            <input id="create-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="What should we call you?" required>
+          </div>
+
+          <div class="section-label">Choose your game mode</div>
+          <input id="create-mode" name="mode" type="hidden" value="same_image">
+          <div class="choice-grid">
+            <button class="choice selected" type="button" data-create-mode="same_image">
+              <b>🖼 Same Picture</b>
+              <small>Everyone draws the same image.</small>
+            </button>
+            <button class="choice" type="button" data-create-mode="random_assignment">
+              <b>🎲 Mystery Mix</b>
+              <small>Everyone gets a different secret image.</small>
+            </button>
+          </div>
+
+          <div class="choice-grid choice-grid-spaced">
+            <div class="field">
+              <label for="create-viewing">👀 Viewing time</label>
+              <select id="create-viewing" name="viewing_duration">
+                <option value="10">10 seconds</option>
+                <option value="20" selected>20 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="create-drawing">✏️ Drawing time</label>
+              <select id="create-drawing" name="drawing_duration">
+                <option value="180" selected>3 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="">Unlimited</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <button id="create-back-btn" class="btn back" type="button">Go back</button>
+            <button class="btn yellow" type="submit">Create room ↗</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- JOIN -->
+      <section id="join-view" class="screen hidden" aria-live="polite">
+        <form id="join-form" class="card setup-card join-card">
+          <h2>Jump into a room!</h2>
+          <div class="field">
+            <label for="join-nickname">Your nickname</label>
+            <input id="join-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="Pick a fun nickname" required>
+          </div>
+          <div class="field">
+            <label for="join-code">Room code</label>
+            <input id="join-code" name="room_code" type="text" maxlength="12" autocomplete="off" placeholder="ENTER CODE" class="code-input" required>
+          </div>
+          <div class="card-actions">
+            <button id="join-back-btn" class="btn back" type="button">Go back</button>
+            <button class="btn yellow" type="submit">Let's go! ↗</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- LOBBY -->
+      <section id="lobby-view" class="screen hidden" aria-live="polite">
+        <div class="card lobby-card">
+          <h2>Waiting for the crew...</h2>
+
+          <div class="room-code">
+            <span>ROOM CODE</span>
+            <strong id="room-code">------</strong>
+            <button id="copy-code-btn" class="btn cyan btn-small" type="button">Copy</button>
+          </div>
+
+          <div class="section-label">Players in the room · <span id="players-summary">0 of 10</span></div>
+          <ul id="players-list" class="players"></ul>
+
+          <div class="lobby-meta-row">
+            <span id="ready-count" class="pill">0 ready</span>
+            <button id="ready-btn" class="btn mint btn-small" type="button">I'm ready</button>
+          </div>
+
+          <div class="section-label">Game settings</div>
+          <p id="settings-note" class="section-note"></p>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="settings-mode">Game mode</label>
+              <select id="settings-mode">
+                <option value="same_image">Same image for everyone</option>
+                <option value="random_assignment">Random image per player</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-viewing">Viewing time</label>
+              <select id="settings-viewing">
+                <option value="10">10 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="settings-drawing">Drawing time</label>
+              <select id="settings-drawing">
+                <option value="180">3 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="">Unlimited</option>
+              </select>
+            </div>
+          </div>
+          <div class="setting-summary">
+            <span>Current setup</span>
+            <strong id="settings-summary">Same image · 20s view · 3 min draw</strong>
+          </div>
+
+          <div class="section-label">Reference pictures</div>
+          <p id="images-hint" class="section-note">The host uploads the reference images.</p>
+          <div class="images-header">
+            <span id="images-summary" class="pill">0 / 1 uploaded</span>
+          </div>
+          <form id="upload-form" class="upload-form hidden">
+            <label for="image-input" class="upload-drop">
+              <span class="upload-title">Add reference images</span>
+              <span class="upload-subtitle">JPG, PNG or WEBP · up to 5 MB each</span>
+              <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+            </label>
+            <button id="upload-btn" class="btn cyan" type="submit">Upload selected</button>
+            <p id="upload-progress" class="upload-progress" role="status"></p>
+          </form>
+          <ul id="images-list" class="images-list"></ul>
+          <p id="images-complete" class="complete-note hidden">All reference images are ready!</p>
+
+          <div id="host-start" class="host-start hidden">
+            <button id="start-game-btn" class="btn yellow btn-wide" type="button">Start game ✦</button>
+            <p id="start-hint" class="start-hint"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- GAME -->
+      <section id="game-view" class="screen hidden" aria-live="polite">
+        <div class="game-top">
+          <div class="game-heading">
+            <span id="game-phase-eyebrow" class="eyebrow game-eyebrow">VIEWING</span>
+            <span id="game-phase-title" class="game-title">MEMORIZE THIS!</span>
+          </div>
+          <span class="pill">ROOM · <span id="game-room-code">------</span></span>
+          <div id="game-timer" class="timer">--:--</div>
+        </div>
+        <p id="game-phase-copy" class="game-subtitle">The reference disappears when the countdown ends.</p>
+
+        <div id="viewing-panel" class="viewing-panel hidden">
+          <div class="reference-card">
+            <img id="reference-image" class="hidden" alt="Your reference image">
+            <div id="reference-placeholder" class="reference-placeholder">Loading your reference image…</div>
+          </div>
+          <p class="note">Memorize the image. It disappears when the countdown ends.</p>
+        </div>
+
+        <div id="drawing-panel" class="drawing-panel hidden">
+          <div class="draw-area">
+            <div class="canvas-wrap">
+              <span class="canvas-hint">Your canvas. Your masterpiece.</span>
+              <canvas id="drawing-canvas" width="1600" height="1000"></canvas>
+              <div id="canvas-lock" class="canvas-lock hidden">
+                <strong id="canvas-lock-title">Drawing submitted</strong>
+                <p id="canvas-lock-copy">Reopen your drawing to keep editing.</p>
+              </div>
+            </div>
+            <aside class="toolbar">
+              <div id="color-palette" class="palette">
+                <button class="swatch" type="button" data-color="#f04b5b" style="background:#f04b5b" aria-label="Red"></button>
+                <button class="swatch" type="button" data-color="#ff9d35" style="background:#ff9d35" aria-label="Orange"></button>
+                <button class="swatch" type="button" data-color="#ffdf3d" style="background:#ffdf3d" aria-label="Yellow"></button>
+                <button class="swatch" type="button" data-color="#55b978" style="background:#55b978" aria-label="Green"></button>
+                <button class="swatch" type="button" data-color="#398bc5" style="background:#398bc5" aria-label="Blue"></button>
+                <button class="swatch" type="button" data-color="#a56bc5" style="background:#a56bc5" aria-label="Purple"></button>
+                <button class="swatch" type="button" data-color="#ffffff" style="background:#ffffff" aria-label="White"></button>
+                <button class="swatch" type="button" data-color="#17171b" style="background:#17171b" aria-label="Black"></button>
+                <label class="swatch custom-swatch" for="brush-color" aria-label="Custom color">
+                  <input id="brush-color" type="color" value="#17171b">
+                </label>
+              </div>
+              <label class="size-control" for="brush-size">
+                <span>Size <em id="brush-size-label">10</em></span>
+                <input id="brush-size" type="range" min="2" max="60" value="10">
+              </label>
+              <button id="eraser-btn" class="tool-btn" type="button">Eraser</button>
+              <button id="undo-btn" class="tool-btn" type="button">↶ Undo</button>
+              <button id="redo-btn" class="tool-btn" type="button">↷ Redo</button>
+              <button id="clear-btn" class="tool-btn" type="button">Clear</button>
+            </aside>
+          </div>
+
+          <div class="game-bottom">
+            <div id="game-players-list" class="progress"></div>
+            <button id="submit-drawing-btn" class="btn submit" type="button">SUBMIT MY ART!</button>
+          </div>
+          <p id="save-status" class="save-status">All changes saved</p>
+          <div id="host-game-controls" class="host-game-controls hidden">
+            <button id="finish-drawing-btn" class="btn cyan btn-small" type="button">End drawing now</button>
           </div>
         </div>
 
-        <div class="home-grid">
-          <form id="create-form" class="card form-card">
-            <div class="card-heading">
-              <span class="step-badge">Create</span>
-              <h2>Start a room</h2>
-              <p>You become the host and control the lobby.</p>
-            </div>
+        <div id="completed-panel" class="completed-panel hidden">
+          <div class="done-card">
+            <div class="done-mark" aria-hidden="true">🎉</div>
+            <h3>Pencils down!</h3>
+            <p>All drawings are locked and ready for the reveal.</p>
+            <p id="completed-progress" class="completed-progress"></p>
+            <button id="start-reveal-btn" class="btn yellow hidden" type="button">Start reveal ✦</button>
+          </div>
+        </div>
 
-            <label for="create-nickname">Your nickname</label>
-            <input id="create-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="e.g. Picasso" required>
-
-            <div class="field-grid">
-              <div>
-                <label for="create-mode">Game mode</label>
-                <select id="create-mode" name="mode">
-                  <option value="same_image">Same image for everyone</option>
-                  <option value="random_assignment">Random image per player</option>
-                </select>
-              </div>
-              <div>
-                <label for="create-viewing">Viewing time</label>
-                <select id="create-viewing" name="viewing_duration">
-                  <option value="10">10 seconds</option>
-                  <option value="20" selected>20 seconds</option>
-                  <option value="30">30 seconds</option>
-                  <option value="60">60 seconds</option>
-                </select>
-              </div>
-            </div>
-
-            <label for="create-drawing">Drawing time</label>
-            <select id="create-drawing" name="drawing_duration">
-              <option value="180" selected>3 minutes</option>
-              <option value="300">5 minutes</option>
-              <option value="">Unlimited</option>
-            </select>
-
-            <button class="button button-primary" type="submit">Create private room</button>
-          </form>
-
-          <form id="join-form" class="card form-card">
-            <div class="card-heading">
-              <span class="step-badge step-badge-alt">Join</span>
-              <h2>Join a room</h2>
-              <p>Ask the host for the six-character room code.</p>
-            </div>
-
-            <label for="join-code">Room code</label>
-            <input id="join-code" name="room_code" type="text" maxlength="12" inputmode="text" autocomplete="off" placeholder="ABC123" class="code-input" required>
-
-            <label for="join-nickname">Your nickname</label>
-            <input id="join-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="e.g. Frida" required>
-
-            <button class="button button-secondary" type="submit">Join room</button>
-          </form>
+        <div class="game-meta-row">
+          <span id="game-player-count" class="pill">0 players</span>
+          <span id="game-progress-summary" class="pill">0 submitted</span>
+          <span id="game-mode-label" class="pill">Same image mode</span>
         </div>
       </section>
 
-      <section id="lobby-view" class="view hidden" aria-live="polite">
-        <div class="lobby-grid">
-          <section class="card players-card">
-            <div class="card-heading card-heading-row">
-              <div>
-                <h2>Players</h2>
-                <p id="players-summary">Waiting for players…</p>
-              </div>
-              <span id="ready-count" class="pill">0 ready</span>
-            </div>
-            <ul id="players-list" class="players-list"></ul>
-            <button id="ready-btn" class="button button-ready" type="button">I'm ready</button>
-          </section>
-
-          <section class="card settings-card">
-            <div class="card-heading">
-              <h2>Lobby settings</h2>
-              <p id="settings-note">Only the host can change these settings.</p>
-            </div>
-
-            <label for="settings-mode">Game mode</label>
-            <select id="settings-mode">
-              <option value="same_image">Same image for everyone</option>
-              <option value="random_assignment">Random image per player</option>
-            </select>
-
-            <label for="settings-viewing">Reference viewing time</label>
-            <select id="settings-viewing">
-              <option value="10">10 seconds</option>
-              <option value="20">20 seconds</option>
-              <option value="30">30 seconds</option>
-              <option value="60">60 seconds</option>
-            </select>
-
-            <label for="settings-drawing">Drawing time</label>
-            <select id="settings-drawing">
-              <option value="180">3 minutes</option>
-              <option value="300">5 minutes</option>
-              <option value="">Unlimited</option>
-            </select>
-
-            <div class="setting-summary">
-              <span class="setting-summary-label">Current setup</span>
-              <strong id="settings-summary">Same image · 20s view · 3 min draw</strong>
-            </div>
-
-            <div id="host-start" class="host-start hidden">
-              <button id="start-game-btn" class="button button-primary" type="button">Start game</button>
-              <p id="start-hint" class="start-hint"></p>
-            </div>
-          </section>
-
-          <section class="card images-card">
-            <div class="card-heading card-heading-row">
-              <div>
-                <h2>Reference images</h2>
-                <p id="images-hint">The host uploads the reference images.</p>
-              </div>
-              <span id="images-summary" class="pill">0 / 1 uploaded</span>
-            </div>
-
-            <form id="upload-form" class="upload-form hidden">
-              <label for="image-input" class="upload-drop">
-                <span class="upload-title">Add reference images</span>
-                <span class="upload-subtitle">JPG, PNG or WEBP · up to 5 MB each</span>
-                <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-              </label>
-              <button id="upload-btn" class="button button-secondary" type="submit">Upload selected</button>
-              <p id="upload-progress" class="upload-progress" role="status"></p>
-            </form>
-
-            <ul id="images-list" class="images-list"></ul>
-            <p id="images-complete" class="complete-note hidden">All reference images are ready.</p>
-          </section>
+      <!-- REVEAL -->
+      <section id="reveal-view" class="screen hidden" aria-live="polite">
+        <div class="game-top">
+          <span class="game-title">THE BIG REVEAL! ✨</span>
+          <span class="pill">ROOM · <span id="reveal-room-code">------</span></span>
+          <span id="reveal-phase-badge" class="pill">1 OF 2</span>
         </div>
-      </section>
 
-      <section id="game-view" class="view hidden" aria-live="polite">
-        <div class="game-grid">
-          <section class="card game-stage-card">
-            <div class="game-phase-head">
-              <div>
-                <p id="game-phase-eyebrow" class="eyebrow">Game</p>
-                <h2 id="game-phase-title">Get ready</h2>
-                <p id="game-phase-copy" class="game-phase-copy">The host is starting the round.</p>
+        <div class="reveal-wrap">
+          <div class="reveal-grid">
+            <div id="reveal-stage-card" class="compare">
+              <div class="compare-head">
+                <div>
+                  <p id="reveal-eyebrow" class="eyebrow">THE BIG REVEAL</p>
+                  <h2 id="reveal-title">The masterpiece</h2>
+                </div>
+                <span id="reveal-subtitle" class="step">Drawing 1 of 2</span>
               </div>
-              <div class="game-timer">
-                <span id="game-timer-label">Time left</span>
-                <strong id="game-timer">--:--</strong>
-              </div>
-            </div>
-
-            <div id="viewing-panel" class="game-panel hidden">
-              <div class="reference-frame">
-                <img id="reference-image" alt="Your reference image" class="hidden">
-                <div id="reference-placeholder" class="reference-placeholder">Loading your reference image…</div>
-              </div>
-              <p class="game-note">Memorize the image. It disappears when the countdown ends.</p>
-            </div>
-
-            <div id="drawing-panel" class="game-panel hidden">
-              <div class="canvas-wrap">
-                <canvas id="drawing-canvas" width="1600" height="1000"></canvas>
-                <div id="canvas-lock" class="canvas-lock hidden">
-                  <strong id="canvas-lock-title">Drawing submitted</strong>
-                  <p id="canvas-lock-copy">Reopen your drawing to keep editing.</p>
+              <div id="reveal-stage" class="pair">
+                <div id="reveal-original-panel" class="art-card">
+                  <div class="art-box reveal-original-frame">
+                    <img id="reveal-original-image" class="hidden" alt="Original reference image">
+                    <div id="reveal-original-placeholder" class="original-hidden">🔒<br>Original is still a mystery!</div>
+                  </div>
+                  <div id="reveal-original-name" class="art-caption">The original</div>
+                </div>
+                <div class="compare-arrow">➜</div>
+                <div class="art-card">
+                  <div class="art-box reveal-frame">
+                    <canvas id="reveal-canvas" width="1600" height="1000"></canvas>
+                    <div id="reveal-empty" class="original-hidden hidden">No drawing submitted</div>
+                  </div>
+                  <div id="reveal-player-name" class="art-caption">The drawing</div>
                 </div>
               </div>
-
-              <div class="drawing-toolbar">
-                <label class="tool tool-color" for="brush-color">
-                  <span>Color</span>
-                  <input id="brush-color" type="color" value="#1b1b1f">
-                </label>
-                <label class="tool tool-size" for="brush-size">
-                  <span>Brush <em id="brush-size-label">10</em></span>
-                  <input id="brush-size" type="range" min="2" max="60" value="10">
-                </label>
-                <button id="eraser-btn" class="tool-button" type="button">Eraser</button>
-                <button id="undo-btn" class="tool-button" type="button">Undo</button>
-                <button id="redo-btn" class="tool-button" type="button">Redo</button>
-                <button id="clear-btn" class="tool-button" type="button">Clear</button>
-              </div>
-
-              <div class="drawing-actions">
-                <p id="save-status" class="save-status">All changes saved</p>
-                <button id="submit-drawing-btn" class="button button-primary" type="button">Submit drawing</button>
-              </div>
             </div>
 
-            <div id="completed-panel" class="game-panel hidden">
-              <div class="completed-mark" aria-hidden="true">D</div>
-              <h3>Drawing time is over</h3>
-              <p>All drawings are locked and ready for the reveal.</p>
-              <p id="completed-progress" class="completed-progress"></p>
-              <button id="start-reveal-btn" class="button button-primary hidden" type="button">Start reveal</button>
-            </div>
+            <aside id="reveal-players-card" class="reveal-players">
+              <h3>Who's up?</h3>
+              <ul id="reveal-players-list"></ul>
+            </aside>
+          </div>
 
-            <div id="host-game-controls" class="host-game-controls hidden">
-              <button id="finish-drawing-btn" class="button button-secondary" type="button">End drawing now</button>
-            </div>
-          </section>
+          <div class="card-actions reveal-actions">
+            <button id="reveal-original-btn" class="btn cyan hidden" type="button">Reveal original</button>
+            <button id="next-reveal-btn" class="btn yellow hidden" type="button">Next player →</button>
+            <p id="reveal-status" class="note">The host controls the reveal.</p>
+          </div>
 
-          <aside class="card game-side-card">
-            <div class="card-heading card-heading-row">
-              <div>
-                <h2>Progress</h2>
-                <p id="game-progress-summary">0 submitted</p>
-              </div>
-              <span id="game-player-count" class="pill">0 players</span>
-            </div>
-            <ul id="game-players-list" class="players-list"></ul>
-            <p id="game-mode-label" class="game-mode-label">Same image mode</p>
-          </aside>
+          <div id="reveal-complete" class="card done-card hidden">
+            <div class="done-mark" aria-hidden="true">🎉</div>
+            <p class="eyebrow">Reveal complete</p>
+            <h2>That's a wrap!</h2>
+            <p>All masterpieces have been revealed. This room will expire automatically.</p>
+          </div>
         </div>
       </section>
-
-      <section id="reveal-view" class="view hidden" aria-live="polite">
-        <section id="reveal-stage-card" class="card reveal-stage-card">
-          <div class="reveal-heading">
-            <div>
-              <p id="reveal-eyebrow" class="eyebrow">Reveal</p>
-              <h2 id="reveal-title">Drawing 1 of 3</h2>
-              <p id="reveal-subtitle" class="game-phase-copy">By a player</p>
-            </div>
-            <span id="reveal-phase-badge" class="pill">Drawing</span>
-          </div>
-
-          <div id="reveal-stage" class="reveal-stage">
-            <div class="reveal-art">
-              <div class="reveal-frame">
-                <canvas id="reveal-canvas" width="1600" height="1000"></canvas>
-                <div id="reveal-empty" class="reference-placeholder hidden">No drawing submitted</div>
-              </div>
-            </div>
-
-            <div id="reveal-original-panel" class="reveal-art reveal-original-panel hidden">
-              <div class="reveal-original-heading">
-                <p class="eyebrow">The original</p>
-                <h3 id="reveal-original-name">Reference</h3>
-              </div>
-              <div class="reveal-frame reveal-original-frame">
-                <img id="reveal-original-image" class="hidden" alt="Original reference image">
-                <div id="reveal-original-placeholder" class="reference-placeholder">Loading the original…</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="reveal-footer">
-            <p id="reveal-status" class="reveal-status">The host controls the reveal.</p>
-            <div class="reveal-buttons">
-              <button id="reveal-original-btn" class="button button-secondary hidden" type="button">Reveal original</button>
-              <button id="next-reveal-btn" class="button button-primary hidden" type="button">Next player</button>
-            </div>
-          </div>
-        </section>
-
-        <section id="reveal-complete" class="card reveal-complete hidden">
-          <div class="completed-mark" aria-hidden="true">D</div>
-          <p class="eyebrow">Reveal complete</p>
-          <h2>That is a wrap</h2>
-          <p>Every drawing and original has been revealed. This room will expire automatically.</p>
-        </section>
-      </section>
     </main>
-
-    <footer class="site-footer">
-      <p>DhioGame · Private rooms expire automatically after 24 hours.</p>
-    </footer>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

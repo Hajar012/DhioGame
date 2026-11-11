@@ -4,11 +4,19 @@ import { clearSession, loadSession, saveSession } from "./session.js";
 const $ = (id) => document.getElementById(id);
 
 const dom = {
+  stage: $("stage"),
   homeView: $("home-view"),
+  createView: $("create-view"),
+  joinView: $("join-view"),
   lobbyView: $("lobby-view"),
   gameView: $("game-view"),
   revealView: $("reveal-view"),
-  roomHeader: $("room-header"),
+  headerRoomActions: $("header-room-actions"),
+  brandLink: $("brand-link"),
+  homeCreateBtn: $("home-create-btn"),
+  homeJoinBtn: $("home-join-btn"),
+  createBackBtn: $("create-back-btn"),
+  joinBackBtn: $("join-back-btn"),
   createForm: $("create-form"),
   createNickname: $("create-nickname"),
   createMode: $("create-mode"),
@@ -46,7 +54,6 @@ const dom = {
   gamePhaseTitle: $("game-phase-title"),
   gamePhaseCopy: $("game-phase-copy"),
   gameTimer: $("game-timer"),
-  gameTimerLabel: $("game-timer-label"),
   viewingPanel: $("viewing-panel"),
   drawingPanel: $("drawing-panel"),
   completedPanel: $("completed-panel"),
@@ -57,6 +64,7 @@ const dom = {
   canvasLockTitle: $("canvas-lock-title"),
   canvasLockCopy: $("canvas-lock-copy"),
   brushColor: $("brush-color"),
+  colorPalette: $("color-palette"),
   brushSize: $("brush-size"),
   brushSizeLabel: $("brush-size-label"),
   eraserBtn: $("eraser-btn"),
@@ -73,6 +81,8 @@ const dom = {
   gameProgressSummary: $("game-progress-summary"),
   gamePlayerCount: $("game-player-count"),
   gameModeLabel: $("game-mode-label"),
+  gameRoomCode: $("game-room-code"),
+  revealRoomCode: $("reveal-room-code"),
   revealStageCard: $("reveal-stage-card"),
   revealTitle: $("reveal-title"),
   revealSubtitle: $("reveal-subtitle"),
@@ -85,6 +95,9 @@ const dom = {
   revealOriginalImage: $("reveal-original-image"),
   revealOriginalPlaceholder: $("reveal-original-placeholder"),
   revealOriginalName: $("reveal-original-name"),
+  revealPlayerName: $("reveal-player-name"),
+  revealPlayersList: $("reveal-players-list"),
+  revealPlayersCard: $("reveal-players-card"),
   revealStatus: $("reveal-status"),
   revealOriginalBtn: $("reveal-original-btn"),
   nextRevealBtn: $("next-reveal-btn"),
@@ -148,17 +161,41 @@ let currentView = "home";
 function init() {
   bindEvents();
   setupCanvas();
-  prefillJoinCodeFromUrl();
+  const hasJoinCode = prefillJoinCodeFromUrl();
   window.setInterval(updateCountdown, 250);
 
   const saved = loadSession();
   if (saved) {
     session = saved;
     restoreSession();
+  } else {
+    showAuthScreen(hasJoinCode ? "join" : "home");
   }
 }
 
 function bindEvents() {
+  dom.homeCreateBtn.addEventListener("click", () => showAuthScreen("create"));
+  dom.homeJoinBtn.addEventListener("click", () => showAuthScreen("join"));
+  dom.createBackBtn.addEventListener("click", () => showAuthScreen("home"));
+  dom.joinBackBtn.addEventListener("click", () => showAuthScreen("home"));
+  dom.brandLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (session) {
+      showToast("Leave the room to return home.");
+    } else {
+      showAuthScreen("home");
+    }
+  });
+
+  document.querySelectorAll("[data-create-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      dom.createMode.value = button.dataset.createMode;
+      document.querySelectorAll("[data-create-mode]").forEach((choice) => {
+        choice.classList.toggle("selected", choice === button);
+      });
+    });
+  });
+
   dom.createForm.addEventListener("submit", handleCreateRoom);
   dom.joinForm.addEventListener("submit", handleJoinRoom);
   dom.readyBtn.addEventListener("click", toggleReady);
@@ -180,6 +217,15 @@ function bindEvents() {
   dom.eraserBtn.addEventListener("click", toggleEraser);
   dom.brushColor.addEventListener("input", () => {
     eraserActive = false;
+    updateColorPalette();
+    updateDrawingControls();
+  });
+  dom.colorPalette.addEventListener("click", (event) => {
+    const swatch = event.target.closest("[data-color]");
+    if (!swatch) return;
+    dom.brushColor.value = swatch.dataset.color;
+    eraserActive = false;
+    updateColorPalette();
     updateDrawingControls();
   });
   dom.brushSize.addEventListener("input", () => {
@@ -209,7 +255,9 @@ function prefillJoinCodeFromUrl() {
   const code = new URLSearchParams(window.location.search).get("room");
   if (code) {
     dom.joinCode.value = code.toUpperCase();
+    return true;
   }
+  return false;
 }
 
 async function handleCreateRoom(event) {
@@ -290,6 +338,7 @@ async function restoreSession() {
       clearSession();
       session = null;
       setConnection("offline");
+      showAuthScreen("home");
       showToast("Your previous room session has expired.");
       return;
     }
@@ -303,19 +352,44 @@ function enterRoom(state) {
   url.searchParams.set("room", state.code);
   window.history.replaceState({}, "", url);
 
+  dom.roomCode.textContent = state.code;
+  dom.gameRoomCode.textContent = state.code;
+  dom.revealRoomCode.textContent = state.code;
   showRoomView("lobby");
   renderLobby(state);
   connectSocket();
-  refreshGameState();
+  if (state.status !== "waiting") {
+    refreshGameState();
+  }
+}
+
+function showAuthScreen(name) {
+  currentView = name;
+  dom.homeView.classList.toggle("hidden", name !== "home");
+  dom.createView.classList.toggle("hidden", name !== "create");
+  dom.joinView.classList.toggle("hidden", name !== "join");
+  dom.lobbyView.classList.add("hidden");
+  dom.gameView.classList.add("hidden");
+  dom.revealView.classList.add("hidden");
+  dom.headerRoomActions.classList.add("hidden");
+  dom.stage.classList.remove("playing");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function showRoomView(view) {
   currentView = view;
-  dom.homeView.classList.toggle("hidden", view !== "home");
+  dom.homeView.classList.add("hidden");
+  dom.createView.classList.add("hidden");
+  dom.joinView.classList.add("hidden");
   dom.lobbyView.classList.toggle("hidden", view !== "lobby");
   dom.gameView.classList.toggle("hidden", view !== "game");
   dom.revealView.classList.toggle("hidden", view !== "reveal");
-  dom.roomHeader.classList.toggle("hidden", view === "home");
+  dom.headerRoomActions.classList.toggle("hidden", false);
+  dom.stage.classList.toggle(
+    "playing",
+    view === "game" || view === "reveal",
+  );
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function renderLobby(state) {
@@ -330,7 +404,7 @@ function renderLobby(state) {
   }
 
   dom.playersSummary.textContent =
-    `${state.player_count} of ${state.max_players} players` +
+    `${state.player_count} / ${state.max_players}` +
     (state.player_count < state.min_players
       ? ` · ${state.min_players - state.player_count} more needed`
       : "");
@@ -824,10 +898,17 @@ function renderRevealState() {
   const phase = revealState.phase;
   const complete = phase === "results_completed";
   dom.revealStageCard.classList.toggle("hidden", complete);
+  dom.revealPlayersCard.classList.toggle("hidden", complete);
   dom.revealComplete.classList.toggle("hidden", !complete);
+  dom.revealRoomCode.textContent = roomState?.code || "------";
 
   if (complete) {
     dom.revealEyebrow.textContent = "Reveal complete";
+    dom.revealPhaseBadge.textContent = "COMPLETE";
+    dom.revealOriginalBtn.classList.add("hidden");
+    dom.nextRevealBtn.classList.add("hidden");
+    dom.revealStatus.textContent =
+      "All drawings and originals have been revealed.";
     return;
   }
 
@@ -835,23 +916,21 @@ function renderRevealState() {
   const total = revealState.total_players;
   const currentNumber = Math.min(revealState.current_index + 1, total);
 
-  dom.revealTitle.textContent = `Drawing ${currentNumber} of ${total}`;
-  dom.revealSubtitle.textContent = player
-    ? `By ${player.nickname}`
-    : "Preparing the next drawing…";
+  dom.revealTitle.textContent = player
+    ? `${player.nickname}'s masterpiece`
+    : "The big reveal";
+  dom.revealSubtitle.textContent = `Drawing ${currentNumber} of ${total}`;
   dom.revealEyebrow.textContent =
-    phase === "reveal_original" ? "Original reveal" : "Drawing reveal";
-  dom.revealPhaseBadge.textContent =
-    phase === "reveal_original" ? "Original revealed" : "Drawing";
-
-  const originalVisible = phase === "reveal_original";
-  dom.revealOriginalPanel.classList.toggle("hidden", !originalVisible);
-  dom.revealStage.classList.toggle("has-original", originalVisible);
-  dom.revealOriginalName.textContent = player
-    ? `Reference for ${player.nickname}`
-    : "Reference";
+    phase === "reveal_original" ? "Original revealed" : "THE BIG REVEAL";
+  dom.revealPhaseBadge.textContent = `${currentNumber} OF ${total}`;
+  dom.revealOriginalPanel.classList.remove("hidden");
+  dom.revealOriginalName.textContent = "The original";
+  dom.revealPlayerName.textContent = player
+    ? `${player.nickname}'s drawing`
+    : "The drawing";
 
   renderRevealCanvas(player?.drawing_data);
+  renderRevealPlayers();
 
   const isHost = Boolean(currentPlayer()?.is_host);
   dom.revealOriginalBtn.classList.toggle(
@@ -866,14 +945,25 @@ function renderRevealState() {
   if (phase === "reveal_drawing") {
     dom.revealStatus.textContent = isHost
       ? "Show the original when everyone is ready."
-      : "Waiting for the host to reveal the original.";
+      : "The host is in charge. Everyone else gets the popcorn 🍿";
   } else if (phase === "reveal_original") {
     dom.revealStatus.textContent = isHost
       ? "Advance when everyone has seen the original."
       : "Waiting for the host to continue.";
-  } else {
-    dom.revealStatus.textContent =
-      "All drawings and originals have been revealed.";
+  }
+}
+
+function renderRevealPlayers() {
+  dom.revealPlayersList.replaceChildren();
+  if (!roomState?.players) return;
+
+  const currentId = revealState?.current_player?.player_id;
+  for (const player of roomState.players) {
+    const item = document.createElement("li");
+    item.className = "reveal-player";
+    if (player.id === currentId) item.classList.add("current");
+    item.textContent = `${player.nickname}${player.is_host ? " ♛" : ""}`;
+    dom.revealPlayersList.append(item);
   }
 }
 
@@ -943,7 +1033,7 @@ async function loadRevealOriginalImage() {
   revokeRevealOriginalUrl();
   dom.revealOriginalImage.classList.add("hidden");
   dom.revealOriginalPlaceholder.classList.remove("hidden");
-  dom.revealOriginalPlaceholder.textContent = "Loading the original…";
+  dom.revealOriginalPlaceholder.textContent = "🔒 Loading the original…";
 
   try {
     const blob = await api.fetchRevealReferenceBlob(
@@ -976,7 +1066,7 @@ function clearRevealOriginalImage() {
   dom.revealOriginalImage.classList.add("hidden");
   dom.revealOriginalPlaceholder.classList.remove("hidden");
   dom.revealOriginalPlaceholder.textContent =
-    "Waiting for the host to reveal the original.";
+    "🔒 Original is still a mystery!";
 }
 
 function revokeRevealOriginalUrl() {
@@ -991,15 +1081,19 @@ function resetRevealState() {
   revealState = null;
   clearRevealOriginalImage();
   dom.revealStageCard.classList.remove("hidden");
+  dom.revealPlayersCard.classList.remove("hidden");
   dom.revealComplete.classList.add("hidden");
-  dom.revealOriginalPanel.classList.add("hidden");
-  dom.revealStage.classList.remove("has-original");
+  dom.revealOriginalPanel.classList.remove("hidden");
   dom.revealOriginalBtn.classList.add("hidden");
   dom.nextRevealBtn.classList.add("hidden");
   dom.revealOriginalBtn.disabled = false;
   dom.nextRevealBtn.disabled = false;
-  dom.revealTitle.textContent = "Drawing reveal";
+  dom.revealTitle.textContent = "The big reveal";
   dom.revealSubtitle.textContent = "Waiting for the reveal to begin…";
+  dom.revealPhaseBadge.textContent = "REVEAL";
+  dom.revealPlayerName.textContent = "The drawing";
+  dom.revealOriginalName.textContent = "The original";
+  dom.revealPlayersList.replaceChildren();
   dom.revealEmpty.classList.add("hidden");
   const revealContext = dom.revealCanvas.getContext("2d");
   revealContext.clearRect(
@@ -1016,6 +1110,8 @@ function handleGameState(state) {
   gameState = state;
   clockOffsetMs = Date.parse(state.server_time) - Date.now();
   dom.roomCode.textContent = state.room_code;
+  dom.gameRoomCode.textContent = state.room_code;
+  dom.revealRoomCode.textContent = state.room_code;
 
   if (REVEAL_PHASES.has(state.phase)) {
     refreshRevealState();
@@ -1062,19 +1158,19 @@ function renderGameState() {
   const phase = gameState.phase;
   const configs = {
     image_viewing: {
-      eyebrow: "Viewing phase",
-      title: "Memorize the image",
+      eyebrow: "VIEWING PHASE",
+      title: "MEMORIZE THIS!",
       copy: "The reference disappears when the viewing countdown ends.",
     },
     drawing: {
-      eyebrow: "Drawing phase",
-      title: "Draw from memory",
+      eyebrow: "DRAWING PHASE",
+      title: "DRAW YOUR HEART OUT",
       copy: "Use the tools below. Your drawing saves automatically.",
     },
     drawing_completed: {
-      eyebrow: "Drawing complete",
-      title: "Pencils down",
-      copy: "All drawings are locked. The reveal arrives in the next milestone.",
+      eyebrow: "DRAWING COMPLETE",
+      title: "PENCILS DOWN!",
+      copy: "All drawings are locked. The host can start the big reveal.",
     },
   };
   const config = configs[phase] || {
@@ -1122,59 +1218,27 @@ function renderGameProgress() {
   dom.gamePlayersList.replaceChildren();
 
   for (const player of gameState.players) {
-    const roomPlayer = roomState?.players.find(
-      (candidate) => candidate.id === player.player_id,
-    );
-
-    const row = document.createElement("li");
-    row.className = "player-row";
-
-    const avatar = document.createElement("div");
-    avatar.className = "player-avatar";
-    avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = initials(player.nickname);
-
-    const main = document.createElement("div");
-    main.className = "player-main";
-
-    const nameLine = document.createElement("div");
-    nameLine.className = "player-name-line";
-
-    const name = document.createElement("span");
-    name.className = "player-name";
-    name.textContent = player.nickname;
-    nameLine.append(name);
-
-    if (roomPlayer?.is_host) nameLine.append(makeBadge("Host", "badge-host"));
-    if (player.player_id === session.playerId) {
-      nameLine.append(makeBadge("You", "badge-you"));
-    }
-
     let label = "Not started";
-    let badgeClass = "badge-waiting";
+    let stateClass = "";
     if (player.drawing_status === "submitted") {
       label = "Submitted";
-      badgeClass = "badge-ready";
+      stateClass = "is-submitted";
     } else if (player.drawing_status === "locked") {
       label = "Locked";
-      badgeClass = "badge-host";
+      stateClass = "is-locked";
     } else if (player.has_drawing) {
       label = "Drawing";
-      badgeClass = "badge-you";
+      stateClass = "is-drawing";
     }
-    nameLine.append(makeBadge(label, badgeClass));
 
-    const meta = document.createElement("div");
-    meta.className = "player-meta";
-    const dot = document.createElement("span");
-    dot.className = `online-dot ${player.is_connected ? "" : "offline"}`;
-    const status = document.createElement("span");
-    status.textContent = player.is_connected ? "Online" : "Offline";
-    meta.append(dot, status);
-
-    main.append(nameLine, meta);
-    row.append(avatar, main);
-    dom.gamePlayersList.append(row);
+    const chip = document.createElement("span");
+    chip.className = "progress-chip";
+    if (player.player_id === session.playerId) {
+      chip.classList.add("is-me");
+    }
+    if (stateClass) chip.classList.add(stateClass);
+    chip.textContent = `${player.nickname} · ${label}`;
+    dom.gamePlayersList.append(chip);
   }
 
   const summary =
@@ -1627,21 +1691,25 @@ function updateDrawingControls() {
   dom.redoBtn.disabled = !canEdit || redoStack.length === 0;
   dom.clearBtn.disabled = !canEdit || strokes.length === 0;
   dom.brushSizeLabel.textContent = dom.brushSize.value;
+  dom.colorPalette.querySelectorAll("[data-color]").forEach((swatch) => {
+    swatch.disabled = !canEdit;
+  });
+  updateColorPalette();
 
-  let submitLabel = "Submit drawing";
+  let submitLabel = "SUBMIT MY ART!";
   let submitDisabled = true;
   if (phase === "drawing") {
     if (status === "submitted") {
-      submitLabel = "Reopen drawing";
+      submitLabel = "REOPEN MY ART";
       submitDisabled = false;
     } else if (status === "draft") {
-      submitLabel = "Submit drawing";
+      submitLabel = "SUBMIT MY ART!";
       submitDisabled = false;
     } else {
-      submitLabel = "Drawing locked";
+      submitLabel = "LOCKED";
     }
   } else if (phase === "drawing_completed") {
-    submitLabel = "Drawing locked";
+    submitLabel = "LOCKED";
   }
   dom.submitDrawingBtn.textContent = submitLabel;
   dom.submitDrawingBtn.disabled = submitDisabled;
@@ -1663,6 +1731,16 @@ function updateDrawingControls() {
   dom.drawingCanvas.classList.toggle("is-locked", !canEdit);
 }
 
+function updateColorPalette() {
+  const value = dom.brushColor.value.toLowerCase();
+  dom.colorPalette.querySelectorAll("[data-color]").forEach((swatch) => {
+    swatch.classList.toggle(
+      "selected",
+      swatch.dataset.color.toLowerCase() === value,
+    );
+  });
+}
+
 function flushDrawingOnExit() {
   if (!session || !canEditDrawing()) return;
   const data = buildDrawingData();
@@ -1675,23 +1753,18 @@ function updateCountdown() {
   if (!gameState) return;
 
   if (gameState.phase === "drawing_completed") {
-    dom.gameTimerLabel.textContent = "Drawing";
     dom.gameTimer.textContent = "Locked";
     dom.gameTimer.classList.remove("urgent");
     return;
   }
 
   if (!gameState.phase_ends_at) {
-    dom.gameTimerLabel.textContent =
-      gameState.phase === "drawing" ? "Drawing time" : "Time left";
     dom.gameTimer.textContent =
-      gameState.phase === "drawing" ? "Unlimited" : "--:--";
+      gameState.phase === "drawing" ? "∞" : "--:--";
     dom.gameTimer.classList.remove("urgent");
     return;
   }
 
-  dom.gameTimerLabel.textContent =
-    gameState.phase === "drawing" ? "Drawing ends in" : "Viewing ends in";
   const endTime = Date.parse(gameState.phase_ends_at);
   if (Number.isNaN(endTime)) return;
 
@@ -1873,8 +1946,10 @@ function leaveRoom(message, type = "error") {
   clearSession();
   resetDrawingCanvas();
   setSaveStatus("All changes saved");
-  showRoomView("home");
+  showAuthScreen("home");
   dom.roomCode.textContent = "------";
+  dom.gameRoomCode.textContent = "------";
+  dom.revealRoomCode.textContent = "------";
   dom.playersList.replaceChildren();
   dom.imagesList.replaceChildren();
   dom.gamePlayersList.replaceChildren();
@@ -1923,7 +1998,7 @@ function setConnection(state) {
     reconnecting: "Reconnecting",
     offline: "Offline",
   };
-  dom.connectionStatus.className = `connection-badge connection-${state}`;
+  dom.connectionStatus.className = `pill connection-badge connection-${state}`;
   dom.connectionLabel.textContent = labels[state] || state;
 }
 
