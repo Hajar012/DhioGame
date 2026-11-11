@@ -244,8 +244,9 @@
             <div id="completed-panel" class="game-panel hidden">
               <div class="completed-mark" aria-hidden="true">D</div>
               <h3>Drawing time is over</h3>
-              <p>All drawings are locked. The reveal system arrives in the next milestone.</p>
+              <p>All drawings are locked and ready for the reveal.</p>
               <p id="completed-progress" class="completed-progress"></p>
+              <button id="start-reveal-btn" class="button button-primary hidden" type="button">Start reveal</button>
             </div>
 
             <div id="host-game-controls" class="host-game-controls hidden">
@@ -265,6 +266,54 @@
             <p id="game-mode-label" class="game-mode-label">Same image mode</p>
           </aside>
         </div>
+      </section>
+
+      <section id="reveal-view" class="view hidden" aria-live="polite">
+        <section id="reveal-stage-card" class="card reveal-stage-card">
+          <div class="reveal-heading">
+            <div>
+              <p id="reveal-eyebrow" class="eyebrow">Reveal</p>
+              <h2 id="reveal-title">Drawing 1 of 3</h2>
+              <p id="reveal-subtitle" class="game-phase-copy">By a player</p>
+            </div>
+            <span id="reveal-phase-badge" class="pill">Drawing</span>
+          </div>
+
+          <div id="reveal-stage" class="reveal-stage">
+            <div class="reveal-art">
+              <div class="reveal-frame">
+                <canvas id="reveal-canvas" width="1600" height="1000"></canvas>
+                <div id="reveal-empty" class="reference-placeholder hidden">No drawing submitted</div>
+              </div>
+            </div>
+
+            <div id="reveal-original-panel" class="reveal-art reveal-original-panel hidden">
+              <div class="reveal-original-heading">
+                <p class="eyebrow">The original</p>
+                <h3 id="reveal-original-name">Reference</h3>
+              </div>
+              <div class="reveal-frame reveal-original-frame">
+                <img id="reveal-original-image" class="hidden" alt="Original reference image">
+                <div id="reveal-original-placeholder" class="reference-placeholder">Loading the original…</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="reveal-footer">
+            <p id="reveal-status" class="reveal-status">The host controls the reveal.</p>
+            <div class="reveal-buttons">
+              <button id="reveal-original-btn" class="button button-secondary hidden" type="button">Reveal original</button>
+              <button id="next-reveal-btn" class="button button-primary hidden" type="button">Next player</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="reveal-complete" class="card reveal-complete hidden">
+          <div class="completed-mark" aria-hidden="true">D</div>
+          <p class="eyebrow">Reveal complete</p>
+          <h2>That is a wrap</h2>
+          <p>Every drawing and original has been revealed. This room will expire automatically.</p>
+        </section>
       </section>
     </main>
 

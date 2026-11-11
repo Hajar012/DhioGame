@@ -169,6 +169,41 @@ export const api = {
       // Best-effort save on page exit.
     }
   },
+  startReveal: (code, token) =>
+    request(`${roomPath(code)}/reveal/start`, {
+      method: "POST",
+      token,
+    }),
+  getReveal: (code, token) =>
+    request(`${roomPath(code)}/reveal`, { token }),
+  revealOriginal: (code, token) =>
+    request(`${roomPath(code)}/reveal/original`, {
+      method: "POST",
+      token,
+    }),
+  nextReveal: (code, token) =>
+    request(`${roomPath(code)}/reveal/next`, {
+      method: "POST",
+      token,
+    }),
+  fetchRevealReferenceBlob: async (code, token) => {
+    let response;
+    try {
+      response = await fetch(
+        `${API_BASE}${roomPath(code)}/reveal/reference`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch {
+      throw new ApiError("Cannot reach the DhioGame server.", 0);
+    }
+    if (!response.ok) {
+      throw new ApiError(
+        "The original image is not available.",
+        response.status,
+      );
+    }
+    return response.blob();
+  },
   socketUrl: (code, token) =>
     `${WS_BASE}/api/ws/rooms/${encodeURIComponent(code.toUpperCase())}?token=${encodeURIComponent(token)}`,
 };

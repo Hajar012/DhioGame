@@ -5,9 +5,16 @@ import uuid
 from fastapi import BackgroundTasks, WebSocket
 
 from app.db.session import SessionLocal
-from app.services import games
+from app.models import GamePhase
+from app.services import games, reveals
 from app.services.lobby import build_room_state
 from app.services.rooms import get_room_by_code
+
+REVEAL_PHASES = {
+    GamePhase.REVEAL_DRAWING,
+    GamePhase.REVEAL_ORIGINAL,
+    GamePhase.RESULTS_COMPLETED,
+}
 
 
 class ConnectionManager:
@@ -96,3 +103,28 @@ async def broadcast_game_state(room_code: str) -> None:
 
 def queue_game_state(background_tasks: BackgroundTasks, room_code: str) -> None:
     background_tasks.add_task(broadcast_game_state, room_code)
+
+
+async def broadcast_reveal_state(room_code: str) -> None:
+    with SessionLocal() as db:
+        room = get_room_by_code(db, room_code)
+        if room is None:
+            return
+        game = games.get_current_game(db, room)
+        if game is None or game.current_phase not in REVEAL_PHASES:
+            return
+        reveal = reveals.get_reveal(db, game)
+        if reveal is None:
+            return
+        state = reveals.build_reveal_state(db, game, reveal)
+
+    await manager.broadcast(
+        room.join_code,
+        {"type": "reveal_state", "state": state.model_dump(mode="json")},
+    )
+
+
+def queue_reveal_state(
+    background_tasks: BackgroundTasks, room_code: str
+) -> None:
+    background_tasks.add_task(broadcast_reveal_state, room_code)

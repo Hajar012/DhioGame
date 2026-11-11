@@ -54,6 +54,7 @@ async def room_websocket(
     db.commit()
     await realtime.broadcast_room_state(room.join_code)
     await realtime.broadcast_game_state(room.join_code)
+    await realtime.broadcast_reveal_state(room.join_code)
 
     try:
         while True:

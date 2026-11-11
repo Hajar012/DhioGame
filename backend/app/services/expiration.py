@@ -41,7 +41,13 @@ def cleanup_expired_rooms(
         raise
 
     for room_id in room_ids:
-        shutil.rmtree(upload_dir / str(room_id), ignore_errors=True)
+        room_dir = upload_dir / str(room_id)
+        shutil.rmtree(room_dir, ignore_errors=True)
+        if room_dir.exists():
+            try:
+                room_dir.rmdir()
+            except OSError:
+                pass
 
     logger.info("Deleted %s expired room(s)", len(room_ids))
     return len(room_ids)

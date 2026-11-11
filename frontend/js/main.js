@@ -7,6 +7,7 @@ const dom = {
   homeView: $("home-view"),
   lobbyView: $("lobby-view"),
   gameView: $("game-view"),
+  revealView: $("reveal-view"),
   roomHeader: $("room-header"),
   createForm: $("create-form"),
   createNickname: $("create-nickname"),
@@ -65,12 +66,29 @@ const dom = {
   submitDrawingBtn: $("submit-drawing-btn"),
   saveStatus: $("save-status"),
   completedProgress: $("completed-progress"),
+  startRevealBtn: $("start-reveal-btn"),
   hostGameControls: $("host-game-controls"),
   finishDrawingBtn: $("finish-drawing-btn"),
   gamePlayersList: $("game-players-list"),
   gameProgressSummary: $("game-progress-summary"),
   gamePlayerCount: $("game-player-count"),
   gameModeLabel: $("game-mode-label"),
+  revealStageCard: $("reveal-stage-card"),
+  revealTitle: $("reveal-title"),
+  revealSubtitle: $("reveal-subtitle"),
+  revealEyebrow: $("reveal-eyebrow"),
+  revealPhaseBadge: $("reveal-phase-badge"),
+  revealStage: $("reveal-stage"),
+  revealCanvas: $("reveal-canvas"),
+  revealEmpty: $("reveal-empty"),
+  revealOriginalPanel: $("reveal-original-panel"),
+  revealOriginalImage: $("reveal-original-image"),
+  revealOriginalPlaceholder: $("reveal-original-placeholder"),
+  revealOriginalName: $("reveal-original-name"),
+  revealStatus: $("reveal-status"),
+  revealOriginalBtn: $("reveal-original-btn"),
+  nextRevealBtn: $("next-reveal-btn"),
+  revealComplete: $("reveal-complete"),
   toast: $("toast"),
 };
 
@@ -82,12 +100,17 @@ const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const EXPIRED_SOCKET_CODES = new Set([4401, 4404, 4410]);
 const DRAWING_SAVE_DELAY = 900;
-const ACTIVE_PHASES = new Set(["image_viewing", "drawing", "drawing_completed"]);
+const REVEAL_PHASES = new Set([
+  "reveal_drawing",
+  "reveal_original",
+  "results_completed",
+]);
 
 let session = null;
 let roomState = null;
 let gameState = null;
 let drawingState = null;
+let revealState = null;
 
 let socket = null;
 let heartbeatTimer = null;
@@ -104,6 +127,8 @@ let syncInFlight = false;
 let lastSyncAttempt = 0;
 let referenceObjectUrl = null;
 let referenceRequestId = 0;
+let revealOriginalObjectUrl = null;
+let revealOriginalRequestId = 0;
 
 let canvas = null;
 let context = null;
@@ -145,6 +170,9 @@ function bindEvents() {
   dom.uploadForm.addEventListener("submit", handleUpload);
   dom.startGameBtn.addEventListener("click", handleStartGame);
   dom.finishDrawingBtn.addEventListener("click", handleFinishDrawing);
+  dom.startRevealBtn.addEventListener("click", handleStartReveal);
+  dom.revealOriginalBtn.addEventListener("click", handleRevealOriginal);
+  dom.nextRevealBtn.addEventListener("click", handleNextReveal);
   dom.submitDrawingBtn.addEventListener("click", handleSubmitOrReopen);
   dom.undoBtn.addEventListener("click", undoStroke);
   dom.redoBtn.addEventListener("click", redoStroke);
@@ -286,6 +314,7 @@ function showRoomView(view) {
   dom.homeView.classList.toggle("hidden", view !== "home");
   dom.lobbyView.classList.toggle("hidden", view !== "lobby");
   dom.gameView.classList.toggle("hidden", view !== "game");
+  dom.revealView.classList.toggle("hidden", view !== "reveal");
   dom.roomHeader.classList.toggle("hidden", view === "home");
 }
 
@@ -706,12 +735,293 @@ async function handleFinishDrawing() {
   }
 }
 
+async function handleStartReveal() {
+  if (!session || !gameState) return;
+  dom.startRevealBtn.disabled = true;
+  try {
+    const state = await api.startReveal(session.roomCode, session.token);
+    handleRevealState(state);
+    showToast("Reveal started.", "success");
+  } catch (error) {
+    handleError(error);
+  } finally {
+    dom.startRevealBtn.disabled = false;
+  }
+}
+
+async function handleRevealOriginal() {
+  if (!session || !revealState) return;
+  dom.revealOriginalBtn.disabled = true;
+  try {
+    const state = await api.revealOriginal(
+      session.roomCode,
+      session.token,
+    );
+    handleRevealState(state);
+  } catch (error) {
+    handleError(error);
+  } finally {
+    dom.revealOriginalBtn.disabled = false;
+  }
+}
+
+async function handleNextReveal() {
+  if (!session || !revealState) return;
+  dom.nextRevealBtn.disabled = true;
+  try {
+    const state = await api.nextReveal(session.roomCode, session.token);
+    handleRevealState(state);
+    if (state.phase === "results_completed") {
+      showToast("Reveal complete.", "success");
+    }
+  } catch (error) {
+    handleError(error);
+  } finally {
+    dom.nextRevealBtn.disabled = false;
+  }
+}
+
+async function refreshRevealState() {
+  if (!session) return;
+  const currentSession = session;
+  try {
+    const state = await api.getReveal(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (currentSession !== session) return;
+    handleRevealState(state);
+  } catch (error) {
+    if (error instanceof ApiError && [401, 410].includes(error.status)) {
+      endSession("Your room session has expired. Please join again.");
+    }
+  }
+}
+
+function handleRevealState(state) {
+  if (!state) return;
+  const previous = revealState;
+  revealState = state;
+  showRoomView("reveal");
+  renderRevealState();
+
+  const indexChanged =
+    previous && previous.current_index !== state.current_index;
+  if (
+    state.phase === "reveal_original" &&
+    (previous?.phase !== "reveal_original" ||
+      indexChanged ||
+      !revealOriginalObjectUrl)
+  ) {
+    loadRevealOriginalImage();
+  } else if (state.phase !== "reveal_original") {
+    clearRevealOriginalImage();
+  }
+}
+
+function renderRevealState() {
+  if (!revealState) return;
+  const phase = revealState.phase;
+  const complete = phase === "results_completed";
+  dom.revealStageCard.classList.toggle("hidden", complete);
+  dom.revealComplete.classList.toggle("hidden", !complete);
+
+  if (complete) {
+    dom.revealEyebrow.textContent = "Reveal complete";
+    return;
+  }
+
+  const player = revealState.current_player;
+  const total = revealState.total_players;
+  const currentNumber = Math.min(revealState.current_index + 1, total);
+
+  dom.revealTitle.textContent = `Drawing ${currentNumber} of ${total}`;
+  dom.revealSubtitle.textContent = player
+    ? `By ${player.nickname}`
+    : "Preparing the next drawing…";
+  dom.revealEyebrow.textContent =
+    phase === "reveal_original" ? "Original reveal" : "Drawing reveal";
+  dom.revealPhaseBadge.textContent =
+    phase === "reveal_original" ? "Original revealed" : "Drawing";
+
+  const originalVisible = phase === "reveal_original";
+  dom.revealOriginalPanel.classList.toggle("hidden", !originalVisible);
+  dom.revealStage.classList.toggle("has-original", originalVisible);
+  dom.revealOriginalName.textContent = player
+    ? `Reference for ${player.nickname}`
+    : "Reference";
+
+  renderRevealCanvas(player?.drawing_data);
+
+  const isHost = Boolean(currentPlayer()?.is_host);
+  dom.revealOriginalBtn.classList.toggle(
+    "hidden",
+    !(isHost && phase === "reveal_drawing"),
+  );
+  dom.nextRevealBtn.classList.toggle(
+    "hidden",
+    !(isHost && phase === "reveal_original"),
+  );
+
+  if (phase === "reveal_drawing") {
+    dom.revealStatus.textContent = isHost
+      ? "Show the original when everyone is ready."
+      : "Waiting for the host to reveal the original.";
+  } else if (phase === "reveal_original") {
+    dom.revealStatus.textContent = isHost
+      ? "Advance when everyone has seen the original."
+      : "Waiting for the host to continue.";
+  } else {
+    dom.revealStatus.textContent =
+      "All drawings and originals have been revealed.";
+  }
+}
+
+function renderRevealCanvas(data) {
+  const target = dom.revealCanvas;
+  const targetContext = target.getContext("2d");
+  targetContext.clearRect(0, 0, target.width, target.height);
+
+  const revealStrokes = data?.strokes || [];
+  dom.revealEmpty.classList.toggle("hidden", revealStrokes.length > 0);
+  if (!revealStrokes.length) return;
+
+  const scaleX = target.width / (data.width || target.width);
+  const scaleY = target.height / (data.height || target.height);
+  targetContext.save();
+  targetContext.scale(scaleX, scaleY);
+
+  for (const stroke of revealStrokes) {
+    targetContext.save();
+    targetContext.globalCompositeOperation = stroke.erase
+      ? "destination-out"
+      : "source-over";
+    targetContext.strokeStyle = stroke.color;
+    targetContext.fillStyle = stroke.color;
+    targetContext.lineWidth = stroke.size;
+    targetContext.lineCap = "round";
+    targetContext.lineJoin = "round";
+
+    if (stroke.points.length === 1) {
+      targetContext.beginPath();
+      targetContext.arc(
+        stroke.points[0].x,
+        stroke.points[0].y,
+        stroke.size / 2,
+        0,
+        Math.PI * 2,
+      );
+      targetContext.fill();
+    } else {
+      targetContext.beginPath();
+      targetContext.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let index = 1; index < stroke.points.length; index += 1) {
+        targetContext.lineTo(
+          stroke.points[index].x,
+          stroke.points[index].y,
+        );
+      }
+      targetContext.stroke();
+    }
+    targetContext.restore();
+  }
+
+  targetContext.restore();
+}
+
+async function loadRevealOriginalImage() {
+  if (
+    !session ||
+    !revealState ||
+    revealState.phase !== "reveal_original"
+  ) {
+    return;
+  }
+
+  const currentSession = session;
+  const requestId = ++revealOriginalRequestId;
+  revokeRevealOriginalUrl();
+  dom.revealOriginalImage.classList.add("hidden");
+  dom.revealOriginalPlaceholder.classList.remove("hidden");
+  dom.revealOriginalPlaceholder.textContent = "Loading the original…";
+
+  try {
+    const blob = await api.fetchRevealReferenceBlob(
+      currentSession.roomCode,
+      currentSession.token,
+    );
+    if (
+      requestId !== revealOriginalRequestId ||
+      currentSession !== session
+    ) {
+      return;
+    }
+    revealOriginalObjectUrl = URL.createObjectURL(blob);
+    dom.revealOriginalImage.src = revealOriginalObjectUrl;
+    dom.revealOriginalImage.classList.remove("hidden");
+    dom.revealOriginalPlaceholder.classList.add("hidden");
+  } catch (error) {
+    if (error instanceof ApiError && [401, 410].includes(error.status)) {
+      endSession("Your room session has expired. Please join again.");
+      return;
+    }
+    dom.revealOriginalPlaceholder.classList.remove("hidden");
+    dom.revealOriginalPlaceholder.textContent = "Original unavailable.";
+  }
+}
+
+function clearRevealOriginalImage() {
+  revealOriginalRequestId += 1;
+  revokeRevealOriginalUrl();
+  dom.revealOriginalImage.classList.add("hidden");
+  dom.revealOriginalPlaceholder.classList.remove("hidden");
+  dom.revealOriginalPlaceholder.textContent =
+    "Waiting for the host to reveal the original.";
+}
+
+function revokeRevealOriginalUrl() {
+  if (revealOriginalObjectUrl) {
+    URL.revokeObjectURL(revealOriginalObjectUrl);
+    revealOriginalObjectUrl = null;
+  }
+  dom.revealOriginalImage.removeAttribute("src");
+}
+
+function resetRevealState() {
+  revealState = null;
+  clearRevealOriginalImage();
+  dom.revealStageCard.classList.remove("hidden");
+  dom.revealComplete.classList.add("hidden");
+  dom.revealOriginalPanel.classList.add("hidden");
+  dom.revealStage.classList.remove("has-original");
+  dom.revealOriginalBtn.classList.add("hidden");
+  dom.nextRevealBtn.classList.add("hidden");
+  dom.revealOriginalBtn.disabled = false;
+  dom.nextRevealBtn.disabled = false;
+  dom.revealTitle.textContent = "Drawing reveal";
+  dom.revealSubtitle.textContent = "Waiting for the reveal to begin…";
+  dom.revealEmpty.classList.add("hidden");
+  const revealContext = dom.revealCanvas.getContext("2d");
+  revealContext.clearRect(
+    0,
+    0,
+    dom.revealCanvas.width,
+    dom.revealCanvas.height,
+  );
+}
+
 function handleGameState(state) {
   if (!state) return;
   const previousPhase = gameState?.phase ?? null;
   gameState = state;
   clockOffsetMs = Date.parse(state.server_time) - Date.now();
   dom.roomCode.textContent = state.room_code;
+
+  if (REVEAL_PHASES.has(state.phase)) {
+    refreshRevealState();
+    return;
+  }
+
   showRoomView("game");
   renderGameState();
 
@@ -787,6 +1097,10 @@ function renderGameState() {
   dom.hostGameControls.classList.toggle(
     "hidden",
     !(me?.is_host && phase === "drawing"),
+  );
+  dom.startRevealBtn.classList.toggle(
+    "hidden",
+    !(me?.is_host && phase === "drawing_completed"),
   );
 
   if (phase === "drawing_completed") {
@@ -1459,6 +1773,8 @@ function connectSocket() {
       renderLobby(message.state);
     } else if (message.type === "game_state") {
       handleGameState(message.state);
+    } else if (message.type === "reveal_state") {
+      handleRevealState(message.state);
     } else if (message.type === "error") {
       showToast(message.message || "Lobby error.");
     }
@@ -1548,6 +1864,9 @@ function leaveRoom(message, type = "error") {
   gameState = null;
   drawingState = null;
   activeSave = null;
+  resetRevealState();
+  dom.startRevealBtn.classList.add("hidden");
+  dom.startRevealBtn.disabled = false;
   imagesSignature = "";
   imagesRequestId += 1;
   revokeImageUrls();
