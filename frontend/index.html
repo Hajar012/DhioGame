@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="dhiogame-api-base" content="http://127.0.0.1:8000">
+  <meta name="description" content="DhioGame — a private multiplayer drawing game.">
+  <title>DhioGame</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="DhioGame home">
+        <span class="brand-mark" aria-hidden="true">D</span>
+        <span>DhioGame</span>
+      </a>
+      <p class="tagline">Draw together. Reveal the chaos.</p>
+    </header>
+
+    <main>
+      <section id="home-view" class="view">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">Private multiplayer drawing</p>
+            <h1>Sketch, laugh, reveal.</h1>
+            <p class="hero-copy">
+              Create a private room, invite your friends, and draw from the same
+              image or from secret random references. No accounts. Just chaos.
+            </p>
+            <ul class="feature-list">
+              <li>2–10 players per room</li>
+              <li>Host-controlled rounds</li>
+              <li>Works on desktop and mobile</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <form id="create-form" class="card form-card">
+            <div class="card-heading">
+              <span class="step-badge">Create</span>
+              <h2>Start a room</h2>
+              <p>You become the host and control the lobby.</p>
+            </div>
+
+            <label for="create-nickname">Your nickname</label>
+            <input id="create-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="e.g. Picasso" required>
+
+            <div class="field-grid">
+              <div>
+                <label for="create-mode">Game mode</label>
+                <select id="create-mode" name="mode">
+                  <option value="same_image">Same image for everyone</option>
+                  <option value="random_assignment">Random image per player</option>
+                </select>
+              </div>
+              <div>
+                <label for="create-viewing">Viewing time</label>
+                <select id="create-viewing" name="viewing_duration">
+                  <option value="10">10 seconds</option>
+                  <option value="20" selected>20 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">60 seconds</option>
+                </select>
+              </div>
+            </div>
+
+            <label for="create-drawing">Drawing time</label>
+            <select id="create-drawing" name="drawing_duration">
+              <option value="180" selected>3 minutes</option>
+              <option value="300">5 minutes</option>
+              <option value="">Unlimited</option>
+            </select>
+
+            <button class="button button-primary" type="submit">Create private room</button>
+          </form>
+
+          <form id="join-form" class="card form-card">
+            <div class="card-heading">
+              <span class="step-badge step-badge-alt">Join</span>
+              <h2>Join a room</h2>
+              <p>Ask the host for the six-character room code.</p>
+            </div>
+
+            <label for="join-code">Room code</label>
+            <input id="join-code" name="room_code" type="text" maxlength="12" inputmode="text" autocomplete="off" placeholder="ABC123" class="code-input" required>
+
+            <label for="join-nickname">Your nickname</label>
+            <input id="join-nickname" name="nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="e.g. Frida" required>
+
+            <button class="button button-secondary" type="submit">Join room</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="lobby-view" class="view hidden" aria-live="polite">
+        <div class="lobby-topbar card">
+          <div class="room-identity">
+            <p class="eyebrow">Private room</p>
+            <div class="room-code-line">
+              <h1 id="room-code">------</h1>
+              <button id="copy-code-btn" class="button button-ghost button-small" type="button">Copy code</button>
+            </div>
+          </div>
+          <div class="lobby-actions">
+            <span id="connection-status" class="connection-badge connection-connecting">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="connection-label">Connecting</span>
+            </span>
+            <button id="leave-btn" class="button button-ghost" type="button">Leave room</button>
+          </div>
+        </div>
+
+        <div class="lobby-grid">
+          <section class="card players-card">
+            <div class="card-heading card-heading-row">
+              <div>
+                <h2>Players</h2>
+                <p id="players-summary">Waiting for players…</p>
+              </div>
+              <span id="ready-count" class="pill">0 ready</span>
+            </div>
+            <ul id="players-list" class="players-list"></ul>
+            <button id="ready-btn" class="button button-ready" type="button">I'm ready</button>
+          </section>
+
+          <section class="card settings-card">
+            <div class="card-heading">
+              <h2>Lobby settings</h2>
+              <p id="settings-note">Only the host can change these settings.</p>
+            </div>
+
+            <label for="settings-mode">Game mode</label>
+            <select id="settings-mode">
+              <option value="same_image">Same image for everyone</option>
+              <option value="random_assignment">Random image per player</option>
+            </select>
+
+            <label for="settings-viewing">Reference viewing time</label>
+            <select id="settings-viewing">
+              <option value="10">10 seconds</option>
+              <option value="20">20 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">60 seconds</option>
+            </select>
+
+            <label for="settings-drawing">Drawing time</label>
+            <select id="settings-drawing">
+              <option value="180">3 minutes</option>
+              <option value="300">5 minutes</option>
+              <option value="">Unlimited</option>
+            </select>
+
+            <div class="setting-summary">
+              <span class="setting-summary-label">Current setup</span>
+              <strong id="settings-summary">Same image · 20s view · 3 min draw</strong>
+            </div>
+          </section>
+
+          <section class="card images-card">
+            <div class="card-heading card-heading-row">
+              <div>
+                <h2>Reference images</h2>
+                <p id="images-hint">The host uploads the reference images.</p>
+              </div>
+              <span id="images-summary" class="pill">0 / 1 uploaded</span>
+            </div>
+
+            <form id="upload-form" class="upload-form hidden">
+              <label for="image-input" class="upload-drop">
+                <span class="upload-title">Add reference images</span>
+                <span class="upload-subtitle">JPG, PNG or WEBP · up to 5 MB each</span>
+                <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+              </label>
+              <button id="upload-btn" class="button button-secondary" type="submit">Upload selected</button>
+              <p id="upload-progress" class="upload-progress" role="status"></p>
+            </form>
+
+            <ul id="images-list" class="images-list"></ul>
+            <p id="images-complete" class="complete-note hidden">All reference images are ready.</p>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>DhioGame · Private rooms expire automatically after 24 hours.</p>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

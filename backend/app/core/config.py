@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         "http://localhost:5500",
         "http://127.0.0.1:5500",
     ]
+    room_ttl_hours: int = 24
+    max_upload_size_bytes: int = 5 * 1024 * 1024
+    upload_dir: Path = PROJECT_ROOT / "backend" / "uploads"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

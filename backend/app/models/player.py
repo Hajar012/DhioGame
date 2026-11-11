@@ -5,12 +5,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
     String,
     UniqueConstraint,
     Uuid,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +60,9 @@ class Player(TimestampMixin, Base):
     )
     session_token_hash: Mapped[str] = mapped_column(
         String(128), unique=True, index=True, nullable=False
+    )
+    is_ready: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

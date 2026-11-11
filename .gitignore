@@ -11,3 +11,6 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+
+# Local temporary uploads
+backend/uploads/

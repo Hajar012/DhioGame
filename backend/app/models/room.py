@@ -14,6 +14,7 @@ from app.models.enums import RoomStatus
 if TYPE_CHECKING:
     from app.models.game import Game
     from app.models.player import Player
+    from app.models.reference_image import ReferenceImage
 
 
 class Room(TimestampMixin, Base):
@@ -67,6 +68,12 @@ class Room(TimestampMixin, Base):
     )
     games: Mapped[list[Game]] = relationship(
         "Game",
+        back_populates="room",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    reference_images: Mapped[list[ReferenceImage]] = relationship(
+        "ReferenceImage",
         back_populates="room",
         cascade="all, delete-orphan",
         passive_deletes=True,
