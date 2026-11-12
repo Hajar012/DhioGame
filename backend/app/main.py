@@ -1,14 +1,19 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import game, health, reveal, rooms, ws
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.services import expiration
+
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 
 
 def create_app() -> FastAPI:
@@ -57,9 +62,20 @@ def create_app() -> FastAPI:
     application.include_router(reveal.router, prefix="/api")
     application.include_router(ws.router, prefix="/api")
 
-    @application.get("/", tags=["root"])
-    def root() -> dict[str, str]:
-        return {"message": f"{settings.app_name} is running"}
+    application.mount(
+        "/css",
+        StaticFiles(directory=FRONTEND_DIR / "css"),
+        name="frontend-css",
+    )
+    application.mount(
+        "/js",
+        StaticFiles(directory=FRONTEND_DIR / "js"),
+        name="frontend-js",
+    )
+
+    @application.get("/", include_in_schema=False)
+    def root() -> FileResponse:
+        return FileResponse(FRONTEND_INDEX)
 
     return application
 
