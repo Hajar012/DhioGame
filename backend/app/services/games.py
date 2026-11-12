@@ -186,12 +186,12 @@ def sync_game_state(
         and now >= locked_game.phase_ends_at
     ):
         locked_game.current_phase = GamePhase.DRAWING
-        locked_game.phase_started_at = locked_game.phase_ends_at
+        locked_game.phase_started_at = now
         if locked_game.drawing_duration_seconds is None:
             locked_game.phase_ends_at = None
             locked_game.ends_at = None
         else:
-            locked_game.phase_ends_at = locked_game.phase_started_at + timedelta(
+            locked_game.phase_ends_at = now + timedelta(
                 seconds=locked_game.drawing_duration_seconds
             )
             locked_game.ends_at = locked_game.phase_ends_at
@@ -208,6 +208,26 @@ def sync_game_state(
 
     db.commit()
     return changed
+
+
+def sync_active_games(db: Session, *, now: datetime | None = None) -> list[str]:
+    now = now or utcnow()
+    active_games = db.scalars(
+        select(Game).where(
+            Game.current_phase.in_(
+                [GamePhase.IMAGE_VIEWING, GamePhase.DRAWING]
+            )
+        )
+    ).all()
+
+    changed_room_codes: list[str] = []
+    for game in active_games:
+        if not sync_game_state(db, game, now=now):
+            continue
+        room = db.get(Room, game.room_id)
+        if room is not None:
+            changed_room_codes.append(room.join_code)
+    return changed_room_codes
 
 
 def mark_reference_loaded(

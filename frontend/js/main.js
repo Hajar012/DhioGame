@@ -119,6 +119,14 @@ const REVEAL_PHASES = new Set([
   "reveal_original",
   "results_completed",
 ]);
+const PHASE_ORDER = {
+  image_viewing: 1,
+  drawing: 2,
+  drawing_completed: 3,
+  reveal_drawing: 4,
+  reveal_original: 5,
+  results_completed: 6,
+};
 
 let session = null;
 let roomState = null;
@@ -137,6 +145,7 @@ let imagesRequestId = 0;
 let imageObjectUrls = [];
 
 let clockOffsetMs = 0;
+let lastGameStateServerTime = -Infinity;
 let syncInFlight = false;
 let lastSyncAttempt = 0;
 let referenceObjectUrl = null;
@@ -815,6 +824,9 @@ async function handleStartReveal() {
     handleRevealState(state);
     showToast("Reveal started.", "success");
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      await refreshGameState();
+    }
     handleError(error);
   } finally {
     dom.startRevealBtn.disabled = false;
@@ -1104,9 +1116,33 @@ function resetRevealState() {
 
 function handleGameState(state) {
   if (!state) return;
+  const incomingServerTime = Date.parse(state.server_time);
+  const sameGame = gameState?.id === state.id;
+
+  if (sameGame) {
+    const currentOrder = PHASE_ORDER[gameState.phase] ?? 0;
+    const incomingOrder = PHASE_ORDER[state.phase] ?? 0;
+    if (incomingOrder < currentOrder) return;
+    if (
+      incomingOrder === currentOrder &&
+      Number.isFinite(incomingServerTime) &&
+      incomingServerTime < lastGameStateServerTime
+    ) {
+      return;
+    }
+  } else {
+    lastGameStateServerTime = -Infinity;
+  }
+
+  if (Number.isFinite(incomingServerTime)) {
+    lastGameStateServerTime = incomingServerTime;
+  }
+
   const previousPhase = gameState?.phase ?? null;
   gameState = state;
-  clockOffsetMs = Date.parse(state.server_time) - Date.now();
+  if (Number.isFinite(incomingServerTime)) {
+    clockOffsetMs = incomingServerTime - Date.now();
+  }
   dom.roomCode.textContent = state.room_code;
   dom.gameRoomCode.textContent = state.room_code;
   dom.revealRoomCode.textContent = state.room_code;
@@ -1266,6 +1302,7 @@ async function refreshGameState() {
     if (error instanceof ApiError && error.status === 404) {
       gameState = null;
       drawingState = null;
+      lastGameStateServerTime = -Infinity;
       if (currentView === "game") showRoomView("lobby");
       return;
     }
@@ -1833,6 +1870,9 @@ async function handleSubmitOrReopen() {
     updateDrawingControls();
     showToast("Drawing submitted.", "success");
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      await refreshGameState();
+    }
     handleError(error);
   } finally {
     updateDrawingControls();
@@ -1910,6 +1950,28 @@ function flushDrawingOnExit() {
   api.saveDrawingKeepalive(session.roomCode, session.token, data);
 }
 
+function phaseDeadlineMs(state) {
+  if (!state) return null;
+
+  const duration =
+    state.phase === "image_viewing"
+      ? state.viewing_duration_seconds
+      : state.phase === "drawing"
+        ? state.drawing_duration_seconds
+        : null;
+
+  if (duration != null && state.phase_started_at) {
+    const startedAt = Date.parse(state.phase_started_at);
+    if (Number.isFinite(startedAt)) {
+      return startedAt + duration * 1000;
+    }
+  }
+
+  if (!state.phase_ends_at) return null;
+  const endsAt = Date.parse(state.phase_ends_at);
+  return Number.isFinite(endsAt) ? endsAt : null;
+}
+
 function updateCountdown() {
   if (!gameState) return;
 
@@ -1919,15 +1981,13 @@ function updateCountdown() {
     return;
   }
 
-  if (!gameState.phase_ends_at) {
+  const endTime = phaseDeadlineMs(gameState);
+  if (endTime == null) {
     dom.gameTimer.textContent =
       gameState.phase === "drawing" ? "∞" : "--:--";
     dom.gameTimer.classList.remove("urgent");
     return;
   }
-
-  const endTime = Date.parse(gameState.phase_ends_at);
-  if (Number.isNaN(endTime)) return;
 
   const remaining = Math.max(0, endTime - (Date.now() + clockOffsetMs));
   dom.gameTimer.textContent = formatClock(remaining);
@@ -2097,6 +2157,7 @@ function leaveRoom(message, type = "error") {
   roomState = null;
   gameState = null;
   drawingState = null;
+  lastGameStateServerTime = -Infinity;
   activeSave = null;
   resetRevealState();
   dom.startRevealBtn.classList.add("hidden");

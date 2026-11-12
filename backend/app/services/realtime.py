@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 
 from fastapi import BackgroundTasks, WebSocket
@@ -9,6 +11,8 @@ from app.models import GamePhase
 from app.services import games, reveals
 from app.services.lobby import build_room_state
 from app.services.rooms import get_room_by_code
+
+logger = logging.getLogger(__name__)
 
 REVEAL_PHASES = {
     GamePhase.REVEAL_DRAWING,
@@ -128,3 +132,16 @@ def queue_reveal_state(
     background_tasks: BackgroundTasks, room_code: str
 ) -> None:
     background_tasks.add_task(broadcast_reveal_state, room_code)
+
+
+async def game_phase_loop(interval_seconds: float = 1.0) -> None:
+    while True:
+        try:
+            with SessionLocal() as db:
+                room_codes = games.sync_active_games(db)
+            for room_code in room_codes:
+                await broadcast_game_state(room_code)
+        except Exception:
+            logger.exception("Game phase synchronization failed")
+
+        await asyncio.sleep(interval_seconds)

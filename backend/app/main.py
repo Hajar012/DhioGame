@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import game, health, reveal, rooms, ws
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.services import expiration
+from app.services import expiration, realtime
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 FRONTEND_INDEX = FRONTEND_DIR / "index.html"
@@ -24,12 +24,16 @@ def create_app() -> FastAPI:
         cleanup_task = asyncio.create_task(
             expiration.cleanup_loop(settings.room_cleanup_interval_seconds)
         )
+        phase_task = asyncio.create_task(realtime.game_phase_loop())
         try:
             yield
         finally:
             cleanup_task.cancel()
+            phase_task.cancel()
             with suppress(asyncio.CancelledError):
                 await cleanup_task
+            with suppress(asyncio.CancelledError):
+                await phase_task
 
     application = FastAPI(
         title=settings.app_name,
