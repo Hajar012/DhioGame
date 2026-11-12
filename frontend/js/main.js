@@ -146,6 +146,7 @@ let imageObjectUrls = [];
 
 let clockOffsetMs = 0;
 let lastGameStateServerTime = -Infinity;
+let lastRevealServerTime = -Infinity;
 let syncInFlight = false;
 let lastSyncAttempt = 0;
 let referenceObjectUrl = null;
@@ -843,6 +844,9 @@ async function handleRevealOriginal() {
     );
     handleRevealState(state);
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      await refreshRevealState();
+    }
     handleError(error);
   } finally {
     dom.revealOriginalBtn.disabled = false;
@@ -859,6 +863,9 @@ async function handleNextReveal() {
       showToast("Reveal complete.", "success");
     }
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      await refreshRevealState();
+    }
     handleError(error);
   } finally {
     dom.nextRevealBtn.disabled = false;
@@ -884,8 +891,44 @@ async function refreshRevealState() {
 
 function handleRevealState(state) {
   if (!state) return;
+  const incomingServerTime = Date.parse(state.server_time);
+  const sameGame = revealState?.game_id === state.game_id;
+
+  if (sameGame) {
+    if (state.current_index < revealState.current_index) return;
+    if (state.current_index === revealState.current_index) {
+      const currentOrder = PHASE_ORDER[revealState.phase] ?? 0;
+      const incomingOrder = PHASE_ORDER[state.phase] ?? 0;
+      if (incomingOrder < currentOrder) return;
+      if (
+        incomingOrder === currentOrder &&
+        Number.isFinite(incomingServerTime) &&
+        incomingServerTime < lastRevealServerTime
+      ) {
+        return;
+      }
+    }
+  } else {
+    lastRevealServerTime = -Infinity;
+  }
+
+  if (Number.isFinite(incomingServerTime)) {
+    lastRevealServerTime = incomingServerTime;
+    lastGameStateServerTime = Math.max(
+      lastGameStateServerTime,
+      incomingServerTime,
+    );
+  }
+
   const previous = revealState;
   revealState = state;
+  if (gameState?.id === state.game_id) {
+    gameState = {
+      ...gameState,
+      phase: state.phase,
+      server_time: state.server_time,
+    };
+  }
   showRoomView("reveal");
   renderRevealState();
 
@@ -1117,16 +1160,25 @@ function resetRevealState() {
 function handleGameState(state) {
   if (!state) return;
   const incomingServerTime = Date.parse(state.server_time);
-  const sameGame = gameState?.id === state.id;
+  const sameGame =
+    gameState?.id === state.id || revealState?.game_id === state.id;
 
   if (sameGame) {
-    const currentOrder = PHASE_ORDER[gameState.phase] ?? 0;
+    const currentOrder = Math.max(
+      PHASE_ORDER[gameState?.phase] ?? 0,
+      revealState?.game_id === state.id
+        ? (PHASE_ORDER[revealState.phase] ?? 0)
+        : 0,
+    );
     const incomingOrder = PHASE_ORDER[state.phase] ?? 0;
-    if (incomingOrder < currentOrder) return;
+    const incomingReveal = REVEAL_PHASES.has(state.phase);
+    if (!incomingReveal && incomingOrder < currentOrder) return;
     if (
+      !incomingReveal &&
       incomingOrder === currentOrder &&
       Number.isFinite(incomingServerTime) &&
-      incomingServerTime < lastGameStateServerTime
+      incomingServerTime <
+        Math.max(lastGameStateServerTime, lastRevealServerTime)
     ) {
       return;
     }
@@ -1303,6 +1355,7 @@ async function refreshGameState() {
       gameState = null;
       drawingState = null;
       lastGameStateServerTime = -Infinity;
+      lastRevealServerTime = -Infinity;
       if (currentView === "game") showRoomView("lobby");
       return;
     }
@@ -2158,6 +2211,7 @@ function leaveRoom(message, type = "error") {
   gameState = null;
   drawingState = null;
   lastGameStateServerTime = -Infinity;
+  lastRevealServerTime = -Infinity;
   activeSave = null;
   resetRevealState();
   dom.startRevealBtn.classList.add("hidden");

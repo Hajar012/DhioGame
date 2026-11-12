@@ -103,6 +103,8 @@ def start_reveal(db: Session, room: Room, game: Game) -> Reveal:
 
 def reveal_original(db: Session, game: Game) -> Reveal:
     locked_game = _lock_game(db, game)
+    if locked_game.current_phase == GamePhase.REVEAL_ORIGINAL:
+        return _lock_reveal(db, locked_game)
     if locked_game.current_phase != GamePhase.REVEAL_DRAWING:
         raise AppError(409, "The original image is not ready to reveal")
     reveal = _lock_reveal(db, locked_game)
