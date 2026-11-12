@@ -114,6 +114,11 @@ export const api = {
     request(`${roomPath(code)}/game/start`, { method: "POST", token }),
   syncGame: (code, token) =>
     request(`${roomPath(code)}/game/sync`, { method: "POST", token }),
+  markReferenceLoaded: (code, token) =>
+    request(`${roomPath(code)}/game/reference-loaded`, {
+      method: "POST",
+      token,
+    }),
   finishDrawing: (code, token) =>
     request(`${roomPath(code)}/game/finish-drawing`, {
       method: "POST",

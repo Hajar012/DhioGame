@@ -458,18 +458,31 @@ h1 em { font-style: normal; color: var(--yellow); }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-.setting-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 12px;
-  padding: 12px;
+.settings-details {
+  margin-top: 4px;
   border: 2px solid var(--ink);
   border-radius: 12px;
   background: var(--cyan-pale);
 }
-.setting-summary span { color: var(--muted); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
-.setting-summary strong { font-size: 0.9rem; }
+.settings-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+.settings-details summary::-webkit-details-marker { display: none; }
+.settings-edit {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.settings-details .settings-grid { padding: 0 12px 4px; }
 .images-header { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .upload-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
 .upload-drop {
@@ -608,11 +621,11 @@ h1 em { font-style: normal; color: var(--yellow); }
 .draw-area {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px;
+  align-items: start;
   filter: drop-shadow(5px 6px 0 var(--ink));
 }
 .canvas-wrap {
   position: relative;
-  min-height: 475px;
   overflow: hidden;
   border: 3px solid var(--ink);
   border-radius: 17px 0 0 17px;
@@ -625,6 +638,7 @@ h1 em { font-style: normal; color: var(--yellow); }
 #drawing-canvas {
   display: block;
   width: 100%;
+  height: auto;
   aspect-ratio: 8 / 5;
   touch-action: none;
   cursor: crosshair;
@@ -662,6 +676,7 @@ h1 em { font-style: normal; color: var(--yellow); }
   display: flex;
   flex-direction: column;
   align-items: center;
+  align-self: stretch;
   gap: 9px;
   padding: 12px 9px;
   border: 3px solid var(--ink);
@@ -813,9 +828,8 @@ h1 em { font-style: normal; color: var(--yellow); }
 .art-box canvas {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 100%;
-  aspect-ratio: 8 / 5;
+  height: 100%;
+  object-fit: contain;
   background: #fffdf8;
 }
 .art-caption { margin-top: 9px; text-align: center; font-weight: 900; }
@@ -893,7 +907,6 @@ h1 em { font-style: normal; color: var(--yellow); }
   .card { margin-top: 20px; padding: 19px; }
   .settings-grid { grid-template-columns: 1fr 1fr; }
   .draw-area { grid-template-columns: minmax(0, 1fr) 72px; }
-  .canvas-wrap { min-height: 390px; }
   .toolbar { padding: 8px 5px; }
   .swatch { width: 22px; height: 22px; }
   .reveal-grid { grid-template-columns: 1fr; }
@@ -910,7 +923,6 @@ h1 em { font-style: normal; color: var(--yellow); }
   .compare-arrow { transform: rotate(90deg); font-size: 1.5rem; }
   .art-box { height: 190px; }
   .draw-area { grid-template-columns: minmax(0, 1fr) 65px; }
-  .canvas-wrap { min-height: 340px; }
   .tool-btn { font-size: 0.66rem; }
   .timer { width: 63px; height: 63px; font-size: 1rem; }
   .game-bottom { justify-content: center; }

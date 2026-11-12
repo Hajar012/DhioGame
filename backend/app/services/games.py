@@ -37,6 +37,8 @@ LOCKED_PHASES = {
     GamePhase.EXPIRED,
 }
 
+VIEWING_LOAD_TIMEOUT_SECONDS = 30
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -97,17 +99,14 @@ def start_game(db: Session, room: Room) -> Game:
         raise AppError(409, message)
 
     now = utcnow()
-    viewing_ends_at = now + timedelta(
-        seconds=settings.viewing_duration_seconds
-    )
     game = Game(
         room_id=locked_room.id,
         mode=settings.mode,
         current_phase=GamePhase.IMAGE_VIEWING,
         viewing_duration_seconds=settings.viewing_duration_seconds,
         drawing_duration_seconds=settings.drawing_duration_seconds,
-        phase_started_at=now,
-        phase_ends_at=viewing_ends_at,
+        phase_started_at=None,
+        phase_ends_at=None,
         started_at=now,
     )
     db.add(game)
@@ -151,6 +150,13 @@ def _lock_drawings(db: Session, game_id) -> None:
     )
 
 
+def _start_viewing_timer(game: Game, now: datetime) -> None:
+    game.phase_started_at = now
+    game.phase_ends_at = now + timedelta(
+        seconds=game.viewing_duration_seconds or 0
+    )
+
+
 def sync_game_state(
     db: Session, game: Game, *, now: datetime | None = None
 ) -> bool:
@@ -162,6 +168,17 @@ def sync_game_state(
         raise AppError(404, "Game not found")
 
     changed = False
+
+    if (
+        locked_game.current_phase == GamePhase.IMAGE_VIEWING
+        and locked_game.phase_ends_at is None
+        and locked_game.started_at is not None
+        and now
+        >= locked_game.started_at
+        + timedelta(seconds=VIEWING_LOAD_TIMEOUT_SECONDS)
+    ):
+        _start_viewing_timer(locked_game, now)
+        changed = True
 
     if (
         locked_game.current_phase == GamePhase.IMAGE_VIEWING
@@ -191,6 +208,50 @@ def sync_game_state(
 
     db.commit()
     return changed
+
+
+def mark_reference_loaded(
+    db: Session, game: Game, player: Player
+) -> tuple[Game, bool]:
+    locked_game = db.scalar(
+        select(Game).where(Game.id == game.id).with_for_update()
+    )
+    if locked_game is None:
+        raise AppError(404, "Game not found")
+    if locked_game.current_phase != GamePhase.IMAGE_VIEWING:
+        return locked_game, False
+
+    drawing = db.scalar(
+        select(Drawing)
+        .where(
+            Drawing.game_id == locked_game.id,
+            Drawing.player_id == player.id,
+        )
+        .with_for_update()
+    )
+    if drawing is None or drawing.reference_loaded_at is not None:
+        return locked_game, False
+
+    now = utcnow()
+    drawing.reference_loaded_at = now
+    db.flush()
+
+    pending = db.scalar(
+        select(Drawing.id)
+        .where(
+            Drawing.game_id == locked_game.id,
+            Drawing.reference_loaded_at.is_(None),
+        )
+        .limit(1)
+    )
+    started = False
+    if pending is None and locked_game.phase_ends_at is None:
+        _start_viewing_timer(locked_game, now)
+        started = True
+
+    db.commit()
+    db.refresh(locked_game)
+    return locked_game, started
 
 
 def finish_drawing(db: Session, game: Game) -> None:

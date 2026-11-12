@@ -29,6 +29,9 @@ class Drawing(TimestampMixin, Base):
         ForeignKey("players.id", ondelete="CASCADE"), index=True, nullable=False
     )
     data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_loaded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[DrawingStatus] = mapped_column(
         Enum(
             DrawingStatus,

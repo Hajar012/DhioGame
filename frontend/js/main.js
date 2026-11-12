@@ -37,8 +37,8 @@ const dom = {
   settingsMode: $("settings-mode"),
   settingsViewing: $("settings-viewing"),
   settingsDrawing: $("settings-drawing"),
-  settingsNote: $("settings-note"),
   settingsSummary: $("settings-summary"),
+  settingsEdit: $("settings-edit"),
   hostStart: $("host-start"),
   startGameBtn: $("start-game-btn"),
   startHint: $("start-hint"),
@@ -48,8 +48,6 @@ const dom = {
   uploadProgress: $("upload-progress"),
   imagesList: $("images-list"),
   imagesSummary: $("images-summary"),
-  imagesHint: $("images-hint"),
-  imagesComplete: $("images-complete"),
   gamePhaseEyebrow: $("game-phase-eyebrow"),
   gamePhaseTitle: $("game-phase-title"),
   gamePhaseCopy: $("game-phase-copy"),
@@ -113,6 +111,9 @@ const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const EXPIRED_SOCKET_CODES = new Set([4401, 4404, 4410]);
 const DRAWING_SAVE_DELAY = 900;
+const CANVAS_WIDTH = 1600;
+const CANVAS_HEIGHT = 1000;
+const MAX_CANVAS_PIXEL_RATIO = 3;
 const REVEAL_PHASES = new Set([
   "reveal_drawing",
   "reveal_original",
@@ -151,6 +152,8 @@ let redoStack = [];
 let currentStroke = null;
 let strokeStartSnapshot = null;
 let drawingPointerId = null;
+let drawingRevision = 0;
+let canvasObserver = null;
 let eraserActive = false;
 let saveTimer = null;
 let saveRetryTimer = null;
@@ -377,6 +380,7 @@ function showAuthScreen(name) {
 }
 
 function showRoomView(view) {
+  const viewChanged = currentView !== view;
   currentView = view;
   dom.homeView.classList.add("hidden");
   dom.createView.classList.add("hidden");
@@ -389,7 +393,9 @@ function showRoomView(view) {
     "playing",
     view === "game" || view === "reveal",
   );
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (viewChanged) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 function renderLobby(state) {
@@ -482,9 +488,7 @@ function renderSettings(state, isHost) {
       ? ""
       : String(settings.drawing_duration_seconds);
 
-  dom.settingsNote.textContent = isHost
-    ? "You control these settings. Changes sync instantly."
-    : "Only the host can change these settings.";
+  dom.settingsEdit.classList.toggle("hidden", !isHost);
   dom.settingsSummary.textContent =
     `${MODE_LABELS[settings.mode]} · ` +
     `${settings.viewing_duration_seconds}s view · ` +
@@ -512,16 +516,11 @@ function renderHostStart(state, isHost) {
 function renderImages(state, isHost) {
   dom.imagesSummary.textContent =
     `${state.uploaded_images} / ${state.required_images} uploaded`;
-  dom.imagesHint.textContent =
-    state.settings.mode === "same_image"
-      ? "Same-image mode needs exactly one reference image."
-      : `Random assignment needs one image per player (${state.required_images}).`;
 
   dom.uploadForm.classList.toggle(
     "hidden",
     !isHost || state.uploads_complete,
   );
-  dom.imagesComplete.classList.toggle("hidden", !state.uploads_complete);
 
   if (!isHost) {
     dom.imagesList.replaceChildren(
@@ -679,7 +678,6 @@ async function handleSettingsChange() {
       payload,
     );
     renderLobby(state);
-    showToast("Lobby settings updated.", "success");
   } catch (error) {
     handleError(error);
     renderLobby(roomState);
@@ -1130,7 +1128,12 @@ function handleGameState(state) {
   }
 
   if (state.phase === "drawing") {
-    if (previousPhase !== "drawing" || !drawingState) {
+    if (
+      previousPhase !== "drawing" ||
+      !drawingState ||
+      drawingState.game_id !== state.id
+    ) {
+      prepareDrawingSession(state);
       loadDrawingState();
     } else {
       updateDrawingControls();
@@ -1307,8 +1310,31 @@ async function loadReferenceImage() {
 
     referenceObjectUrl = URL.createObjectURL(blob);
     dom.referenceImage.src = referenceObjectUrl;
+    const decoded = await waitForImageReady(dom.referenceImage);
+    if (requestId !== referenceRequestId || currentSession !== session) return;
+    if (!decoded) {
+      dom.referencePlaceholder.classList.remove("hidden");
+      dom.referencePlaceholder.textContent = "Reference image unavailable.";
+      return;
+    }
+
     dom.referenceImage.classList.remove("hidden");
     dom.referencePlaceholder.classList.add("hidden");
+
+    if (gameState?.phase === "image_viewing") {
+      try {
+        const state = await api.markReferenceLoaded(
+          currentSession.roomCode,
+          currentSession.token,
+        );
+        if (currentSession !== session) return;
+        handleGameState(state);
+      } catch (error) {
+        if (error instanceof ApiError && [401, 410].includes(error.status)) {
+          endSession("Your room session has expired.");
+        }
+      }
+    }
   } catch (error) {
     if (error instanceof ApiError && [401, 410].includes(error.status)) {
       endSession("Your room session has expired.");
@@ -1317,6 +1343,27 @@ async function loadReferenceImage() {
     dom.referencePlaceholder.classList.remove("hidden");
     dom.referencePlaceholder.textContent = "Reference image unavailable.";
   }
+}
+
+async function waitForImageReady(image) {
+  if (typeof image.decode === "function") {
+    try {
+      await image.decode();
+      return image.naturalWidth > 0;
+    } catch {
+      // Fall back to the load event when decode() is unavailable or rejected.
+    }
+  }
+  if (image.complete) return image.naturalWidth > 0;
+  return new Promise((resolve) => {
+    const finish = () => {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      resolve(image.naturalWidth > 0);
+    };
+    image.addEventListener("load", finish);
+    image.addEventListener("error", finish);
+  });
 }
 
 function clearReferenceImage() {
@@ -1335,9 +1382,45 @@ function revokeReferenceUrl() {
   dom.referenceImage.removeAttribute("src");
 }
 
+function prepareDrawingSession(state) {
+  const me = state.players.find(
+    (player) => player.player_id === session?.playerId,
+  );
+  const status = me?.drawing_status || "draft";
+  const canEdit = status === "draft";
+
+  drawingState = {
+    id: null,
+    game_id: state.id,
+    status,
+    data: null,
+    submitted_at: null,
+    updated_at: null,
+    can_edit: canEdit,
+    can_submit: canEdit,
+    can_unsubmit: status === "submitted",
+    phase: state.phase,
+    phase_ends_at: state.phase_ends_at,
+    server_time: state.server_time,
+  };
+  strokes = [];
+  undoStack = [];
+  redoStack = [];
+  currentStroke = null;
+  strokeStartSnapshot = null;
+  drawingPointerId = null;
+  drawingRevision = 0;
+  lastSavedPayload = "";
+  redrawCanvas();
+  setSaveStatus("All changes saved");
+  updateDrawingControls();
+  syncCanvasSurface();
+}
+
 async function loadDrawingState() {
   if (!session || !gameState) return;
   const currentSession = session;
+  const localRevision = drawingRevision;
   try {
     const state = await api.getDrawing(
       currentSession.roomCode,
@@ -1345,7 +1428,7 @@ async function loadDrawingState() {
     );
     if (currentSession !== session) return;
     drawingState = state;
-    applyDrawingData(state.data, { loaded: true });
+    applyDrawingData(state.data, { loaded: true, localRevision });
     if (gameState?.phase === "drawing_completed") {
       setSaveStatus("Drawing locked");
     }
@@ -1357,13 +1440,39 @@ async function loadDrawingState() {
   }
 }
 
-function applyDrawingData(data, { loaded = false } = {}) {
-  strokes = (data?.strokes || []).map((stroke) => ({
+function applyDrawingData(data, { loaded = false, localRevision = null } = {}) {
+  const incoming = (data?.strokes || []).map((stroke) => ({
     color: stroke.color,
     size: stroke.size,
     erase: Boolean(stroke.erase),
     points: stroke.points.map((point) => ({ x: point.x, y: point.y })),
   }));
+  const localEdits =
+    localRevision !== null && drawingRevision !== localRevision;
+  const baselinePayload = data ? JSON.stringify(data) : "";
+
+  if (localEdits) {
+    strokes = incoming.concat(strokes);
+    undoStack = [];
+    redoStack = [];
+    if (currentStroke) {
+      strokeStartSnapshot = strokes.slice();
+    } else {
+      drawingPointerId = null;
+    }
+    redrawCanvas();
+    lastSavedPayload = baselinePayload;
+    if (loaded) {
+      setSaveStatus("Unsaved changes");
+      if (gameState?.phase === "drawing" && canEditDrawing()) {
+        scheduleSave();
+      }
+    }
+    updateDrawingControls();
+    return true;
+  }
+
+  strokes = incoming;
   undoStack = [];
   redoStack = [];
   currentStroke = null;
@@ -1372,9 +1481,10 @@ function applyDrawingData(data, { loaded = false } = {}) {
   redrawCanvas();
   lastSavedPayload = data ? JSON.stringify(buildDrawingData()) : "";
   if (loaded) {
-    setSaveStatus(data ? "Saved drawing loaded" : "All changes saved");
+    setSaveStatus(data ? "Drawing loaded" : "All changes saved");
   }
   updateDrawingControls();
+  return false;
 }
 
 function setupCanvas() {
@@ -1384,15 +1494,56 @@ function setupCanvas() {
   canvas.addEventListener("pointermove", moveStroke);
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointercancel", endStroke);
+
+  if (typeof ResizeObserver !== "undefined") {
+    canvasObserver = new ResizeObserver(() => syncCanvasSurface());
+    canvasObserver.observe(canvas);
+  }
+  window.addEventListener("resize", syncCanvasSurface);
+  window.visualViewport?.addEventListener("resize", syncCanvasSurface);
+  syncCanvasSurface();
+}
+
+function syncCanvasSurface() {
+  if (!canvas || !context) return;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return;
+
+  const ratio = Math.min(
+    window.devicePixelRatio || 1,
+    MAX_CANVAS_PIXEL_RATIO,
+  );
+  const targetWidth = Math.max(1, Math.round(rect.width * ratio));
+  const targetHeight = Math.max(1, Math.round(rect.height * ratio));
+  if (canvas.width === targetWidth && canvas.height === targetHeight) {
+    return;
+  }
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  redrawCanvas();
+}
+
+function applyCanvasTransform() {
+  if (!canvas || !context) return;
+  context.setTransform(
+    canvas.width / CANVAS_WIDTH,
+    0,
+    0,
+    canvas.height / CANVAS_HEIGHT,
+    0,
+    0,
+  );
 }
 
 function canvasPoint(event) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+  if (rect.width < 1 || rect.height < 1) return { x: 0, y: 0 };
+  const scaleX = CANVAS_WIDTH / rect.width;
+  const scaleY = CANVAS_HEIGHT / rect.height;
   return {
-    x: clamp((event.clientX - rect.left) * scaleX, 0, canvas.width),
-    y: clamp((event.clientY - rect.top) * scaleY, 0, canvas.height),
+    x: clamp((event.clientX - rect.left) * scaleX, 0, CANVAS_WIDTH),
+    y: clamp((event.clientY - rect.top) * scaleY, 0, CANVAS_HEIGHT),
   };
 }
 
@@ -1401,6 +1552,7 @@ function beginStroke(event) {
   event.preventDefault();
   const point = canvasPoint(event);
   drawingPointerId = event.pointerId;
+  drawingRevision += 1;
   try {
     canvas.setPointerCapture(event.pointerId);
   } catch {
@@ -1441,6 +1593,7 @@ function endStroke(event) {
     undoStack.push(strokeStartSnapshot || []);
     redoStack = [];
     strokes.push(currentStroke);
+    drawingRevision += 1;
   }
 
   currentStroke = null;
@@ -1502,9 +1655,14 @@ function drawWholeStroke(stroke) {
 }
 
 function redrawCanvas() {
-  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (!canvas || !context) return;
+  applyCanvasTransform();
+  context.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   for (const stroke of strokes) {
     drawWholeStroke(stroke);
+  }
+  if (currentStroke) {
+    drawWholeStroke(currentStroke);
   }
 }
 
@@ -1512,6 +1670,7 @@ function undoStroke() {
   if (!canEditDrawing() || undoStack.length === 0) return;
   redoStack.push(strokes.slice());
   strokes = undoStack.pop();
+  drawingRevision += 1;
   redrawCanvas();
   updateDrawingControls();
   scheduleSave();
@@ -1521,6 +1680,7 @@ function redoStroke() {
   if (!canEditDrawing() || redoStack.length === 0) return;
   undoStack.push(strokes.slice());
   strokes = redoStack.pop();
+  drawingRevision += 1;
   redrawCanvas();
   updateDrawingControls();
   scheduleSave();
@@ -1531,6 +1691,7 @@ function clearCanvas() {
   undoStack.push(strokes.slice());
   redoStack = [];
   strokes = [];
+  drawingRevision += 1;
   redrawCanvas();
   updateDrawingControls();
   scheduleSave();
@@ -1553,8 +1714,8 @@ function canEditDrawing() {
 function buildDrawingData() {
   return {
     version: 1,
-    width: canvas.width,
-    height: canvas.height,
+    width: CANVAS_WIDTH,
+    height: CANVAS_HEIGHT,
     strokes: strokes.map((stroke) => ({
       color: stroke.color,
       size: roundCoord(stroke.size),
@@ -1975,6 +2136,7 @@ function resetDrawingCanvas() {
   currentStroke = null;
   strokeStartSnapshot = null;
   drawingPointerId = null;
+  drawingRevision += 1;
   eraserActive = false;
   lastSavedPayload = "";
   if (context && canvas) redrawCanvas();

@@ -56,6 +56,25 @@ def read_game(
     return state
 
 
+@router.post(
+    "/{room_code}/game/reference-loaded",
+    response_model=GameState,
+)
+def mark_reference_loaded(
+    room_code: str,
+    background_tasks: BackgroundTasks,
+    context: RoomContext = Depends(get_room_context),
+    db: Session = Depends(get_db),
+) -> GameState:
+    game = _get_game_or_404(db, context)
+    changed = games.sync_game_state(db, game)
+    game, started = games.mark_reference_loaded(db, game, context.player)
+    state = games.build_game_state(db, context.room, game)
+    if changed or started:
+        realtime.queue_game_state(background_tasks, context.room.join_code)
+    return state
+
+
 @router.post("/{room_code}/game/sync", response_model=GameState)
 def sync_game(
     room_code: str,

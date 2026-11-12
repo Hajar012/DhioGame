@@ -159,40 +159,40 @@
           </div>
 
           <div class="section-label">Game settings</div>
-          <p id="settings-note" class="section-note"></p>
-          <div class="settings-grid">
-            <div class="field">
-              <label for="settings-mode">Game mode</label>
-              <select id="settings-mode">
-                <option value="same_image">Same image for everyone</option>
-                <option value="random_assignment">Random image per player</option>
-              </select>
+          <details class="settings-details">
+            <summary>
+              <span id="settings-summary">Same image · 20s view · 3 min draw</span>
+              <span id="settings-edit" class="settings-edit">Change</span>
+            </summary>
+            <div class="settings-grid">
+              <div class="field">
+                <label for="settings-mode">Game mode</label>
+                <select id="settings-mode">
+                  <option value="same_image">Same image for everyone</option>
+                  <option value="random_assignment">Random image per player</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="settings-viewing">Viewing time</label>
+                <select id="settings-viewing">
+                  <option value="10">10 seconds</option>
+                  <option value="20">20 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">60 seconds</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="settings-drawing">Drawing time</label>
+                <select id="settings-drawing">
+                  <option value="180">3 minutes</option>
+                  <option value="300">5 minutes</option>
+                  <option value="">Unlimited</option>
+                </select>
+              </div>
             </div>
-            <div class="field">
-              <label for="settings-viewing">Viewing time</label>
-              <select id="settings-viewing">
-                <option value="10">10 seconds</option>
-                <option value="20">20 seconds</option>
-                <option value="30">30 seconds</option>
-                <option value="60">60 seconds</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="settings-drawing">Drawing time</label>
-              <select id="settings-drawing">
-                <option value="180">3 minutes</option>
-                <option value="300">5 minutes</option>
-                <option value="">Unlimited</option>
-              </select>
-            </div>
-          </div>
-          <div class="setting-summary">
-            <span>Current setup</span>
-            <strong id="settings-summary">Same image · 20s view · 3 min draw</strong>
-          </div>
+          </details>
 
           <div class="section-label">Reference pictures</div>
-          <p id="images-hint" class="section-note">The host uploads the reference images.</p>
           <div class="images-header">
             <span id="images-summary" class="pill">0 / 1 uploaded</span>
           </div>
@@ -206,7 +206,6 @@
             <p id="upload-progress" class="upload-progress" role="status"></p>
           </form>
           <ul id="images-list" class="images-list"></ul>
-          <p id="images-complete" class="complete-note hidden">All reference images are ready!</p>
 
           <div id="host-start" class="host-start hidden">
             <button id="start-game-btn" class="btn yellow btn-wide" type="button">Start game ✦</button>
