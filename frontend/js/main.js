@@ -2004,23 +2004,7 @@ function flushDrawingOnExit() {
 }
 
 function phaseDeadlineMs(state) {
-  if (!state) return null;
-
-  const duration =
-    state.phase === "image_viewing"
-      ? state.viewing_duration_seconds
-      : state.phase === "drawing"
-        ? state.drawing_duration_seconds
-        : null;
-
-  if (duration != null && state.phase_started_at) {
-    const startedAt = Date.parse(state.phase_started_at);
-    if (Number.isFinite(startedAt)) {
-      return startedAt + duration * 1000;
-    }
-  }
-
-  if (!state.phase_ends_at) return null;
+  if (!state?.phase_ends_at) return null;
   const endsAt = Date.parse(state.phase_ends_at);
   return Number.isFinite(endsAt) ? endsAt : null;
 }

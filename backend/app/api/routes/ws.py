@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.models import ConnectionStatus
 from app.services import games, realtime, rooms
 
@@ -60,8 +60,13 @@ async def room_websocket(
         while True:
             message = await websocket.receive_text()
             if message.strip() == "ping":
-                game = games.get_current_game(db, room)
-                if game is not None and games.sync_game_state(db, game):
+                with SessionLocal() as ping_db:
+                    game = games.get_current_game(ping_db, room)
+                    changed = (
+                        game is not None
+                        and games.sync_game_state(ping_db, game)
+                    )
+                if changed:
                     await realtime.broadcast_game_state(room.join_code)
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:

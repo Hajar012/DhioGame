@@ -27,6 +27,7 @@ def get_or_create_drawing(
     )
     if for_update:
         statement = statement.with_for_update()
+    statement = statement.execution_options(populate_existing=True)
     drawing = db.scalar(statement)
     if drawing is None:
         drawing = Drawing(
@@ -106,7 +107,6 @@ def save_drawing(
     player: Player,
     data: DrawingData,
 ) -> tuple[Drawing, bool]:
-    games.sync_game_state(db, game)
     drawing = get_or_create_drawing(db, game, player, for_update=True)
 
     if game.current_phase != GamePhase.DRAWING:
@@ -129,7 +129,6 @@ def save_drawing(
 
 
 def submit_drawing(db: Session, game: Game, player: Player) -> Drawing:
-    games.sync_game_state(db, game)
     drawing = get_or_create_drawing(db, game, player, for_update=True)
 
     if game.current_phase != GamePhase.DRAWING:
@@ -147,7 +146,6 @@ def submit_drawing(db: Session, game: Game, player: Player) -> Drawing:
 
 
 def unsubmit_drawing(db: Session, game: Game, player: Player) -> Drawing:
-    games.sync_game_state(db, game)
     drawing = get_or_create_drawing(db, game, player, for_update=True)
 
     if game.current_phase != GamePhase.DRAWING:

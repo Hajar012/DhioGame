@@ -27,7 +27,11 @@ from app.services import drawings, games
 
 
 def get_reveal(db: Session, game: Game) -> Reveal | None:
-    return db.scalar(select(Reveal).where(Reveal.game_id == game.id))
+    return db.scalar(
+        select(Reveal)
+        .where(Reveal.game_id == game.id)
+        .execution_options(populate_existing=True)
+    )
 
 
 def get_reveal_or_404(db: Session, game: Game) -> Reveal:
@@ -49,7 +53,10 @@ def get_reveal_order(reveal: Reveal) -> list[UUID]:
 
 def _lock_game(db: Session, game: Game) -> Game:
     locked_game = db.scalar(
-        select(Game).where(Game.id == game.id).with_for_update()
+        select(Game)
+        .where(Game.id == game.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_game is None:
         raise AppError(404, "Game not found")
@@ -61,6 +68,7 @@ def _lock_reveal(db: Session, game: Game) -> Reveal:
         select(Reveal)
         .where(Reveal.game_id == game.id)
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if reveal is None:
         raise AppError(409, "The reveal has not started")

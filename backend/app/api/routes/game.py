@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import RoomContext, get_room_context
@@ -24,6 +24,17 @@ def _get_game_or_404(db: Session, context: RoomContext) -> Game:
     if game is None:
         raise AppError(404, "The game has not started")
     return game
+
+
+def _error_with_background(
+    error: AppError, background_tasks: BackgroundTasks
+) -> JSONResponse:
+    response = JSONResponse(
+        status_code=error.status_code,
+        content={"detail": error.detail},
+    )
+    response.background = background_tasks
+    return response
 
 
 @router.post("/{room_code}/game/start", response_model=GameState)
@@ -128,12 +139,17 @@ def read_my_reference(
     if changed:
         realtime.queue_game_state(background_tasks, context.room.join_code)
 
-    image = games.get_reference_image_for_player(
-        db, context.room, game, context.player
-    )
-    path = images.get_storage_path(image.storage_key)
-    if not path.is_file():
-        raise AppError(404, "Reference image file is missing")
+    try:
+        image = games.get_reference_image_for_player(
+            db, context.room, game, context.player
+        )
+        path = images.get_storage_path(image.storage_key)
+        if not path.is_file():
+            raise AppError(404, "Reference image file is missing")
+    except AppError as error:
+        if changed:
+            return _error_with_background(error, background_tasks)
+        raise
 
     return FileResponse(
         path,
@@ -166,11 +182,21 @@ def save_drawing(
     db: Session = Depends(get_db),
 ) -> DrawingMutationResponse:
     game = _get_game_or_404(db, context)
-    drawing, progress_changed = drawings.save_drawing(
-        db, game, context.player, payload.data
-    )
+    phase_changed = games.sync_game_state(db, game)
+    try:
+        drawing, progress_changed = drawings.save_drawing(
+            db, game, context.player, payload.data
+        )
+    except AppError as error:
+        if phase_changed:
+            realtime.queue_game_state(
+                background_tasks, context.room.join_code
+            )
+            return _error_with_background(error, background_tasks)
+        raise
+
     state = drawings.build_drawing_mutation(game, drawing)
-    if progress_changed:
+    if phase_changed or progress_changed:
         realtime.queue_game_state(background_tasks, context.room.join_code)
     return state
 
@@ -186,7 +212,16 @@ def submit_drawing(
     db: Session = Depends(get_db),
 ) -> DrawingMutationResponse:
     game = _get_game_or_404(db, context)
-    drawing = drawings.submit_drawing(db, game, context.player)
+    phase_changed = games.sync_game_state(db, game)
+    try:
+        drawing = drawings.submit_drawing(db, game, context.player)
+    except AppError as error:
+        if phase_changed:
+            realtime.queue_game_state(
+                background_tasks, context.room.join_code
+            )
+            return _error_with_background(error, background_tasks)
+        raise
     realtime.queue_game_state(background_tasks, context.room.join_code)
     return drawings.build_drawing_mutation(game, drawing)
 
@@ -202,6 +237,15 @@ def unsubmit_drawing(
     db: Session = Depends(get_db),
 ) -> DrawingMutationResponse:
     game = _get_game_or_404(db, context)
-    drawing = drawings.unsubmit_drawing(db, game, context.player)
+    phase_changed = games.sync_game_state(db, game)
+    try:
+        drawing = drawings.unsubmit_drawing(db, game, context.player)
+    except AppError as error:
+        if phase_changed:
+            realtime.queue_game_state(
+                background_tasks, context.room.join_code
+            )
+            return _error_with_background(error, background_tasks)
+        raise
     realtime.queue_game_state(background_tasks, context.room.join_code)
     return drawings.build_drawing_mutation(game, drawing)

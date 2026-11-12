@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 
 from fastapi import BackgroundTasks, WebSocket
@@ -12,7 +13,7 @@ from app.services import games, reveals
 from app.services.lobby import build_room_state
 from app.services.rooms import get_room_by_code
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 REVEAL_PHASES = {
     GamePhase.REVEAL_DRAWING,
@@ -135,13 +136,43 @@ def queue_reveal_state(
 
 
 async def game_phase_loop(interval_seconds: float = 1.0) -> None:
+    heartbeat_interval = 60.0
+    heartbeat_elapsed = 0.0
+
+    logger.info(
+        "Game phase loop started pid=%s instance=%s commit=%s interval=%ss",
+        os.getpid(),
+        os.environ.get("RENDER_INSTANCE_ID", "unknown"),
+        os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+        interval_seconds,
+    )
+
     while True:
+        changed_rooms: list[str] = []
         try:
             with SessionLocal() as db:
-                room_codes = games.sync_active_games(db)
-            for room_code in room_codes:
+                changed_rooms = games.sync_active_games(db)
+            for room_code in changed_rooms:
                 await broadcast_game_state(room_code)
+            if changed_rooms:
+                logger.info(
+                    "Game phase loop advanced rooms pid=%s rooms=%s",
+                    os.getpid(),
+                    changed_rooms,
+                )
         except Exception:
-            logger.exception("Game phase synchronization failed")
+            logger.exception(
+                "Game phase synchronization failed pid=%s",
+                os.getpid(),
+            )
+
+        heartbeat_elapsed += interval_seconds
+        if heartbeat_elapsed >= heartbeat_interval:
+            heartbeat_elapsed = 0.0
+            logger.info(
+                "Game phase loop heartbeat pid=%s changed_rooms=%s",
+                os.getpid(),
+                changed_rooms,
+            )
 
         await asyncio.sleep(interval_seconds)

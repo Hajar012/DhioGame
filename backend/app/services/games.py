@@ -55,6 +55,7 @@ def get_current_game(
     )
     if for_update:
         statement = statement.with_for_update()
+    statement = statement.execution_options(populate_existing=True)
     return db.scalar(statement)
 
 
@@ -162,10 +163,17 @@ def sync_game_state(
 ) -> bool:
     now = now or utcnow()
     locked_game = db.scalar(
-        select(Game).where(Game.id == game.id).with_for_update()
+        select(Game)
+        .where(Game.id == game.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_game is None:
         raise AppError(404, "Game not found")
+
+    if locked_game.current_phase in LOCKED_PHASES:
+        db.commit()
+        return False
 
     changed = False
 
@@ -213,11 +221,13 @@ def sync_game_state(
 def sync_active_games(db: Session, *, now: datetime | None = None) -> list[str]:
     now = now or utcnow()
     active_games = db.scalars(
-        select(Game).where(
+        select(Game)
+        .where(
             Game.current_phase.in_(
                 [GamePhase.IMAGE_VIEWING, GamePhase.DRAWING]
             )
         )
+        .execution_options(populate_existing=True)
     ).all()
 
     changed_room_codes: list[str] = []
@@ -234,7 +244,10 @@ def mark_reference_loaded(
     db: Session, game: Game, player: Player
 ) -> tuple[Game, bool]:
     locked_game = db.scalar(
-        select(Game).where(Game.id == game.id).with_for_update()
+        select(Game)
+        .where(Game.id == game.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_game is None:
         raise AppError(404, "Game not found")
@@ -248,6 +261,7 @@ def mark_reference_loaded(
             Drawing.player_id == player.id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if drawing is None or drawing.reference_loaded_at is not None:
         return locked_game, False
@@ -276,7 +290,10 @@ def mark_reference_loaded(
 
 def finish_drawing(db: Session, game: Game) -> None:
     locked_game = db.scalar(
-        select(Game).where(Game.id == game.id).with_for_update()
+        select(Game)
+        .where(Game.id == game.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if locked_game is None:
         raise AppError(404, "Game not found")
